@@ -1031,6 +1031,147 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════
+// Phase 10: Webhooks + Settings
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "create_webhook",
+  "Create a webhook to receive events from GitHub/GitLab. Returns the webhook with its auto-generated secret.",
+  {
+    org_id: z.string().describe("Organization UUID"),
+    name: z.string().describe("Webhook name"),
+    team_id: z.string().describe("Scope to a specific team (optional)").optional(),
+    provider: z.enum(["github", "gitlab", "bitbucket", "custom"]).describe("Webhook provider").default("github"),
+    events: z.array(z.string()).describe("Event types to listen for").default(["push", "pull_request"]),
+  },
+  async (params) => {
+    try {
+      const webhook = await client.createWebhook(params.org_id, params.name, {
+        team_id: params.team_id,
+        provider: params.provider,
+        events: params.events,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(webhook, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "list_webhooks",
+  "List webhooks for an organization.",
+  {
+    org_id: z.string().describe("Organization UUID"),
+    team_id: z.string().describe("Filter by team UUID").optional(),
+    active_only: z.boolean().describe("Only show active webhooks").default(false),
+  },
+  async (params) => {
+    try {
+      const webhooks = await client.listWebhooks(params.org_id, {
+        team_id: params.team_id,
+        active_only: params.active_only,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(webhooks, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "update_webhook",
+  "Update a webhook configuration — name, events, active status.",
+  {
+    webhook_id: z.string().describe("Webhook UUID"),
+    name: z.string().describe("New name").optional(),
+    events: z.array(z.string()).describe("New event types").optional(),
+    active: z.boolean().describe("Enable/disable the webhook").optional(),
+  },
+  async (params) => {
+    try {
+      const webhook = await client.updateWebhook(params.webhook_id, {
+        name: params.name,
+        events: params.events,
+        active: params.active,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(webhook, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_team_settings",
+  "Get team-level configuration — budget limits, model preferences, workflow settings.",
+  {
+    team_id: z.string().describe("Team UUID"),
+  },
+  async (params) => {
+    try {
+      const settings = await client.getTeamSettings(params.team_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(settings, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "update_team_settings",
+  "Update team configuration — budget limits, default model, auto-merge, etc.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    daily_cost_limit_usd: z.number().describe("Daily cost limit in USD").optional(),
+    task_cost_limit_usd: z.number().describe("Per-task cost limit in USD").optional(),
+    default_model: z.string().describe("Default model for new sessions").optional(),
+    auto_merge: z.boolean().describe("Auto-merge after approval").optional(),
+    require_review: z.boolean().describe("Require review before merge").optional(),
+    branch_prefix: z.string().describe("Branch naming prefix").optional(),
+  },
+  async (params) => {
+    try {
+      const { team_id, ...settings } = params;
+      // Remove undefined values
+      const cleanSettings: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(settings)) {
+        if (value !== undefined) cleanSettings[key] = value;
+      }
+      const result = await client.updateTeamSettings(team_id, cleanSettings);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ─── Start server ──────────────────────────────────────────
 
 async function main() {

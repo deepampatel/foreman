@@ -678,4 +678,115 @@ export async function authenticate(apiKey: string): Promise<AuthIdentity> {
   return resp.json() as Promise<AuthIdentity>;
 }
 
+// ─── Phase 10: Webhooks + Settings ─────────────────────
+
+export interface WebhookInfo {
+  id: string;
+  org_id: string;
+  team_id: string | null;
+  name: string;
+  provider: string;
+  secret: string;
+  events: string[];
+  active: boolean;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WebhookDeliveryInfo {
+  id: number;
+  webhook_id: string;
+  event_type: string;
+  payload: Record<string, unknown> | null;
+  status: string;
+  error: string | null;
+  created_at: string;
+}
+
+export interface TeamSettingsInfo {
+  team_id: string;
+  team_name: string;
+  settings: Record<string, unknown>;
+}
+
+export async function createWebhook(
+  orgId: string,
+  name: string,
+  opts: {
+    team_id?: string;
+    provider?: string;
+    events?: string[];
+    config?: Record<string, unknown>;
+  } = {}
+): Promise<WebhookInfo> {
+  return request("/api/v1/webhooks", {
+    method: "POST",
+    body: {
+      org_id: orgId,
+      name,
+      team_id: opts.team_id,
+      provider: opts.provider || "github",
+      events: opts.events || ["push", "pull_request"],
+      config: opts.config || {},
+    },
+  });
+}
+
+export async function listWebhooks(
+  orgId: string,
+  opts: { team_id?: string; active_only?: boolean } = {}
+): Promise<WebhookInfo[]> {
+  const params: Record<string, string> = {};
+  if (opts.team_id) params.team_id = opts.team_id;
+  if (opts.active_only) params.active_only = "true";
+  return request(`/api/v1/webhooks/orgs/${orgId}`, { params });
+}
+
+export async function getWebhook(webhookId: string): Promise<WebhookInfo> {
+  return request(`/api/v1/webhooks/${webhookId}`);
+}
+
+export async function updateWebhook(
+  webhookId: string,
+  updates: {
+    name?: string;
+    events?: string[];
+    active?: boolean;
+    config?: Record<string, unknown>;
+  }
+): Promise<WebhookInfo> {
+  return request(`/api/v1/webhooks/${webhookId}`, {
+    method: "PATCH",
+    body: updates,
+  });
+}
+
+export async function deleteWebhook(webhookId: string): Promise<{ deleted: boolean }> {
+  return request(`/api/v1/webhooks/${webhookId}`, { method: "DELETE" });
+}
+
+export async function listWebhookDeliveries(
+  webhookId: string,
+  limit: number = 50
+): Promise<WebhookDeliveryInfo[]> {
+  return request(`/api/v1/webhooks/${webhookId}/deliveries`, {
+    params: { limit: String(limit) },
+  });
+}
+
+export async function getTeamSettings(teamId: string): Promise<TeamSettingsInfo> {
+  return request(`/api/v1/settings/teams/${teamId}`);
+}
+
+export async function updateTeamSettings(
+  teamId: string,
+  settings: Record<string, unknown>
+): Promise<TeamSettingsInfo> {
+  return request(`/api/v1/settings/teams/${teamId}`, {
+    method: "PATCH",
+    body: settings,
+  });
+}
+
 // ... grows with each phase

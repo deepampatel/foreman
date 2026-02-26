@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -93,6 +94,9 @@ class Team(Base):
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     slug: Mapped[str] = mapped_column(String(100), nullable=False)
+    config: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )  # team settings: budget limits, model prefs, workflow config
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -663,4 +667,89 @@ class ApiKey(Base):
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 10: Webhooks + Settings
+# ══════════════════════════════════════════════════════════════
+
+
+class Webhook(Base):
+    """Incoming webhook configuration — receives events from GitHub, etc.
+
+    Learn: Webhooks let external systems push events into OpenClaw.
+    When GitHub sends a push/PR/issue event, we match it to a team
+    and create or update tasks accordingly.
+
+    The secret is used to verify HMAC signatures on incoming payloads.
+    """
+
+    __tablename__ = "webhooks"
+    __table_args__ = (
+        Index("idx_webhooks_org", "org_id"),
+        Index("idx_webhooks_team", "team_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=new_uuid
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    team_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("teams.id"), nullable=True
+    )  # null = org-wide
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    provider: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="github"
+    )  # github, gitlab, bitbucket, custom
+    secret: Mapped[str] = mapped_column(String(255), nullable=False)
+    events: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default="{push,pull_request}"
+    )  # event types to listen for
+    active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    config: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=False, server_default="{}"
+    )  # extra provider-specific config
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=utcnow
+    )
+
+
+class WebhookDelivery(Base):
+    """Log of incoming webhook deliveries — audit trail.
+
+    Learn: Every incoming webhook POST is logged here for debugging
+    and audit purposes. The payload is stored (minus sensitive data)
+    along with the processing result.
+    """
+
+    __tablename__ = "webhook_deliveries"
+    __table_args__ = (
+        Index("idx_webhook_deliveries_webhook", "webhook_id"),
+        Index("idx_webhook_deliveries_created", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    webhook_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("webhooks.id"), nullable=False
+    )
+    event_type: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # push, pull_request, issues, etc.
+    payload: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True
+    )  # incoming payload (sanitized)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="received"
+    )  # received, processed, failed, ignored
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
     )

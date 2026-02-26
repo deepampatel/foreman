@@ -43,3 +43,13 @@ MERGE_QUEUED = "merge.queued"
 MERGE_STARTED = "merge.started"
 MERGE_COMPLETED = "merge.completed"
 MERGE_FAILED = "merge.failed"
+
+# ─── Phase 10: Webhooks + settings ──────────────────────
+
+WEBHOOK_CREATED = "webhook.created"
+WEBHOOK_UPDATED = "webhook.updated"
+WEBHOOK_DELETED = "webhook.deleted"
+WEBHOOK_DELIVERY_RECEIVED = "webhook.delivery_received"
+WEBHOOK_DELIVERY_PROCESSED = "webhook.delivery_processed"
+WEBHOOK_DELIVERY_FAILED = "webhook.delivery_failed"
+SETTINGS_UPDATED = "settings.updated"
