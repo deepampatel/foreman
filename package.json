@@ -1,0 +1,10 @@
+{
+  "name": "openclaw",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "pnpm --filter frontend dev",
+    "build:frontend": "pnpm --filter frontend build",
+    "dev:mcp": "pnpm --filter mcp-server dev",
+    "build:mcp": "pnpm --filter mcp-server build"
+  }
+}
