@@ -5,6 +5,7 @@ All routers registered here get mounted in main.py.
 
 from fastapi import APIRouter
 
+from openclaw.api.dispatch import router as dispatch_router
 from openclaw.api.git import router as git_router
 from openclaw.api.health import router as health_router
 from openclaw.api.human_requests import router as human_requests_router
@@ -21,3 +22,4 @@ api_router.include_router(git_router, tags=["git"])
 api_router.include_router(sessions_router, tags=["sessions", "costs"])
 api_router.include_router(human_requests_router, tags=["human-requests"])
 api_router.include_router(reviews_router, tags=["reviews", "merge"])
+api_router.include_router(dispatch_router, tags=["dispatch"])

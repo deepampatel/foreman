@@ -61,3 +61,20 @@ async def client(db_session):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def raw_db():
+    """Raw DB session for schema inspection (no savepoint wrapping).
+
+    Learn: Some tests need to inspect DB schema objects (triggers, functions)
+    which aren't affected by savepoints. This gives a direct connection.
+    """
+    engine = create_async_engine(TEST_DB_URL, echo=False)
+    async with engine.connect() as conn:
+        session = AsyncSession(bind=conn, expire_on_commit=False)
+        try:
+            yield session
+        finally:
+            await session.close()
+    await engine.dispose()
