@@ -654,4 +654,28 @@ export async function listReviews(taskId: number): Promise<ReviewInfo[]> {
   return request(`/api/v1/tasks/${taskId}/reviews`);
 }
 
+// ─── Phase 9: Auth ──────────────────────────────────────
+
+export interface AuthIdentity {
+  type: string; // "user" | "api_key"
+  id?: string;
+  email?: string;
+  name?: string;
+  org_id?: string;
+  scopes?: string[];
+}
+
+export async function authenticate(apiKey: string): Promise<AuthIdentity> {
+  const url = new URL("/api/v1/auth/me", API_URL);
+  const resp = await fetch(url.toString(), {
+    headers: {
+      "x-api-key": apiKey,
+    },
+  });
+  if (!resp.ok) {
+    throw new Error(`Authentication failed: ${resp.status} ${resp.statusText}`);
+  }
+  return resp.json() as Promise<AuthIdentity>;
+}
+
 // ... grows with each phase

@@ -1006,6 +1006,31 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════
+// Phase 9: Authentication
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "authenticate",
+  "Validate an API key and return the scoped identity (org, permissions). Use this to verify API key credentials.",
+  {
+    api_key: z.string().describe("The API key to validate (e.g. oc_...)"),
+  },
+  async (params) => {
+    try {
+      const identity = await client.authenticate(params.api_key);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(identity, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ─── Start server ──────────────────────────────────────────
 
 async function main() {

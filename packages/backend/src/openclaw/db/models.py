@@ -615,3 +615,52 @@ class MergeJob(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 9: API Keys
+# ══════════════════════════════════════════════════════════════
+
+
+class ApiKey(Base):
+    """API key for programmatic access (MCP agents, CI, etc.).
+
+    Learn: API keys authenticate OpenClaw agents and external systems.
+    The key itself is only shown once (on creation). We store the hash
+    and a prefix for identification.
+
+    Scopes control what the key can do:
+    - 'all': full access
+    - 'read': read-only
+    - 'agent': agent operations only
+    """
+
+    __tablename__ = "api_keys"
+    __table_args__ = (
+        Index("idx_api_keys_org", "org_id"),
+        Index("idx_api_keys_prefix", "prefix"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), primary_key=True, default=new_uuid
+    )
+    org_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    prefix: Mapped[str] = mapped_column(
+        String(10), nullable=False
+    )  # e.g. "oc_abc123"
+    scopes: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default="{all}"
+    )
+    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
