@@ -681,7 +681,135 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════
-// Phase 4+: More tools added per phase
+// Phase 4: Sessions / Cost Controls
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "start_session",
+  "Start a new agent work session. Checks budget limits first — returns 429 if over budget.",
+  {
+    agent_id: z.string().describe("Agent UUID"),
+    task_id: z.number().describe("Task ID being worked on").optional(),
+    model: z.string().describe("Override model for this session").optional(),
+  },
+  async (params) => {
+    try {
+      const session = await client.startSession(
+        params.agent_id,
+        params.task_id,
+        params.model
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(session, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "record_usage",
+  "Record token usage for an active session. Updates running cost totals.",
+  {
+    session_id: z.number().describe("Session ID"),
+    tokens_in: z.number().describe("Input tokens used").default(0),
+    tokens_out: z.number().describe("Output tokens used").default(0),
+    cache_read: z.number().describe("Cache tokens read").default(0),
+    cache_write: z.number().describe("Cache tokens written").default(0),
+  },
+  async (params) => {
+    try {
+      const session = await client.recordUsage(
+        params.session_id,
+        params.tokens_in,
+        params.tokens_out,
+        params.cache_read,
+        params.cache_write
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(session, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "end_session",
+  "End an agent work session. Records final state and sets agent back to idle.",
+  {
+    session_id: z.number().describe("Session ID"),
+    error: z.string().describe("Error message if session failed").optional(),
+  },
+  async (params) => {
+    try {
+      const session = await client.endSession(params.session_id, params.error);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(session, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "check_budget",
+  "Check if an agent has budget remaining (daily and per-task limits).",
+  {
+    agent_id: z.string().describe("Agent UUID"),
+    task_id: z.number().describe("Task ID to check task-level budget").optional(),
+  },
+  async (params) => {
+    try {
+      const status = await client.checkBudget(params.agent_id, params.task_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(status, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_cost_summary",
+  "Get cost summary for a team — per-agent and per-model breakdown over a period.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    days: z.number().describe("Number of days to look back").default(7),
+  },
+  async (params) => {
+    try {
+      const summary = await client.getCostSummary(params.team_id, params.days);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(summary, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════
+// Phase 5+: More tools added per phase
 // ═══════════════════════════════════════════════════════════
 
 // ─── Start server ──────────────────────────────────────────

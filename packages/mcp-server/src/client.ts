@@ -377,4 +377,112 @@ export async function getCommitLog(
   });
 }
 
+// ─── Phase 4: Sessions / Costs ──────────────────────────────
+
+export interface SessionInfo {
+  id: number;
+  agent_id: string;
+  task_id: number | null;
+  started_at: string;
+  ended_at: string | null;
+  tokens_in: number;
+  tokens_out: number;
+  cache_read: number;
+  cache_write: number;
+  cost_usd: number;
+  model: string | null;
+  error: string | null;
+}
+
+export interface BudgetStatus {
+  within_budget: boolean;
+  daily_spent_usd: number;
+  daily_limit_usd: number;
+  task_spent_usd: number;
+  task_limit_usd: number;
+  violations: string[];
+}
+
+export interface CostSummary {
+  team_id: string;
+  period_days: number;
+  total_cost_usd: number;
+  total_tokens_in: number;
+  total_tokens_out: number;
+  session_count: number;
+  per_agent: { agent_id: string; agent_name: string; cost_usd: number; sessions: number }[];
+  per_model: { model: string | null; cost_usd: number; sessions: number }[];
+}
+
+export async function startSession(
+  agentId: string,
+  taskId?: number,
+  model?: string
+): Promise<SessionInfo> {
+  return request("/api/v1/sessions/start", {
+    method: "POST",
+    body: { agent_id: agentId, task_id: taskId, model },
+  });
+}
+
+export async function recordUsage(
+  sessionId: number,
+  tokensIn: number = 0,
+  tokensOut: number = 0,
+  cacheRead: number = 0,
+  cacheWrite: number = 0
+): Promise<SessionInfo> {
+  return request(`/api/v1/sessions/${sessionId}/usage`, {
+    method: "POST",
+    body: {
+      tokens_in: tokensIn,
+      tokens_out: tokensOut,
+      cache_read: cacheRead,
+      cache_write: cacheWrite,
+    },
+  });
+}
+
+export async function endSession(
+  sessionId: number,
+  error?: string
+): Promise<SessionInfo> {
+  return request(`/api/v1/sessions/${sessionId}/end`, {
+    method: "POST",
+    body: { error },
+  });
+}
+
+export async function getSession(sessionId: number): Promise<SessionInfo> {
+  return request(`/api/v1/sessions/${sessionId}`);
+}
+
+export async function listSessions(
+  agentId: string,
+  opts: { task_id?: number; limit?: number } = {}
+): Promise<SessionInfo[]> {
+  const params: Record<string, string> = {};
+  if (opts.task_id) params.task_id = String(opts.task_id);
+  if (opts.limit) params.limit = String(opts.limit);
+  return request(`/api/v1/agents/${agentId}/sessions`, { params });
+}
+
+export async function checkBudget(
+  agentId: string,
+  taskId?: number
+): Promise<BudgetStatus> {
+  const params: Record<string, string> = {};
+  if (taskId) params.task_id = String(taskId);
+  return request(`/api/v1/agents/${agentId}/budget`, { params });
+}
+
+export async function getCostSummary(
+  teamId: string,
+  days: number = 7
+): Promise<CostSummary> {
+  return request(`/api/v1/teams/${teamId}/costs`, {
+    params: { days: String(days) },
+  });
+}
+
 // ... grows with each phase

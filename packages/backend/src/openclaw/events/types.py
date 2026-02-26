@@ -22,9 +22,11 @@ TASK_COMMENT_ADDED = "task.comment_added"
 MESSAGE_SENT = "message.sent"
 
 # ─── Phase 4: Agent execution ────────────────────────────
-# AGENT_TURN_STARTED = "agent.turn_started"
-# AGENT_TURN_ENDED = "agent.turn_ended"
-# AGENT_TOOL_USED = "agent.tool_used"
+
+SESSION_STARTED = "session.started"
+SESSION_ENDED = "session.ended"
+SESSION_USAGE_RECORDED = "session.usage_recorded"
+AGENT_BUDGET_EXCEEDED = "agent.budget_exceeded"
 
 # ─── Phase 7: Human-in-the-loop ──────────────────────────
 # HUMAN_REQUEST_CREATED = "human_request.created"
