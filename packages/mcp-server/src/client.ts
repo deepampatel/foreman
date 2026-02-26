@@ -485,4 +485,75 @@ export async function getCostSummary(
   });
 }
 
+// ─── Phase 7: Human-in-the-loop ─────────────────────────
+
+export interface HumanRequestInfo {
+  id: number;
+  team_id: string;
+  agent_id: string;
+  task_id: number | null;
+  kind: string;
+  question: string;
+  options: string[];
+  status: string;
+  response: string | null;
+  responded_by: string | null;
+  timeout_at: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export async function createHumanRequest(
+  teamId: string,
+  agentId: string,
+  kind: string,
+  question: string,
+  opts: {
+    task_id?: number;
+    options?: string[];
+    timeout_minutes?: number;
+  } = {}
+): Promise<HumanRequestInfo> {
+  return request("/api/v1/human-requests", {
+    method: "POST",
+    body: {
+      team_id: teamId,
+      agent_id: agentId,
+      kind,
+      question,
+      task_id: opts.task_id,
+      options: opts.options || [],
+      timeout_minutes: opts.timeout_minutes,
+    },
+  });
+}
+
+export async function respondToHumanRequest(
+  requestId: number,
+  response: string,
+  respondedBy?: string
+): Promise<HumanRequestInfo> {
+  return request(`/api/v1/human-requests/${requestId}/respond`, {
+    method: "POST",
+    body: { response, responded_by: respondedBy },
+  });
+}
+
+export async function getHumanRequest(
+  requestId: number
+): Promise<HumanRequestInfo> {
+  return request(`/api/v1/human-requests/${requestId}`);
+}
+
+export async function listHumanRequests(
+  teamId: string,
+  opts: { status?: string; agent_id?: string; task_id?: number } = {}
+): Promise<HumanRequestInfo[]> {
+  const params: Record<string, string> = {};
+  if (opts.status) params.status = opts.status;
+  if (opts.agent_id) params.agent_id = opts.agent_id;
+  if (opts.task_id) params.task_id = String(opts.task_id);
+  return request(`/api/v1/teams/${teamId}/human-requests`, { params });
+}
+
 // ... grows with each phase

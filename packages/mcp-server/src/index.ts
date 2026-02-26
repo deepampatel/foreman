@@ -809,8 +809,99 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════
-// Phase 5+: More tools added per phase
+// Phase 7: Human-in-the-Loop
 // ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "ask_human",
+  "Ask a human for input — question, approval, or review. Creates a persistent request that appears in the dashboard.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    agent_id: z.string().describe("Agent UUID making the request"),
+    kind: z.enum(["question", "approval", "review"]).describe("Request type"),
+    question: z.string().describe("The question or request text"),
+    task_id: z.number().describe("Related task ID").optional(),
+    options: z.array(z.string()).describe("Pre-defined answer options (e.g. ['approve', 'reject'])").default([]),
+    timeout_minutes: z.number().describe("Auto-expire after N minutes").optional(),
+  },
+  async (params) => {
+    try {
+      const hr = await client.createHumanRequest(
+        params.team_id,
+        params.agent_id,
+        params.kind,
+        params.question,
+        {
+          task_id: params.task_id,
+          options: params.options,
+          timeout_minutes: params.timeout_minutes,
+        }
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(hr, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_pending_requests",
+  "Get pending human requests for a team — requests waiting for human response.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    agent_id: z.string().describe("Filter by agent UUID").optional(),
+    task_id: z.number().describe("Filter by task ID").optional(),
+  },
+  async (params) => {
+    try {
+      const requests = await client.listHumanRequests(params.team_id, {
+        status: "pending",
+        agent_id: params.agent_id,
+        task_id: params.task_id,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(requests, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "respond_to_request",
+  "Respond to a pending human request. Used by humans (or automated systems) to answer agent questions.",
+  {
+    request_id: z.number().describe("Human request ID"),
+    response: z.string().describe("The response text"),
+    responded_by: z.string().describe("User UUID who is responding").optional(),
+  },
+  async (params) => {
+    try {
+      const hr = await client.respondToHumanRequest(
+        params.request_id,
+        params.response,
+        params.responded_by
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(hr, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
 
 // ─── Start server ──────────────────────────────────────────
 

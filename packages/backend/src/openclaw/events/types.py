@@ -29,5 +29,7 @@ SESSION_USAGE_RECORDED = "session.usage_recorded"
 AGENT_BUDGET_EXCEEDED = "agent.budget_exceeded"
 
 # ─── Phase 7: Human-in-the-loop ──────────────────────────
-# HUMAN_REQUEST_CREATED = "human_request.created"
-# HUMAN_REQUEST_RESOLVED = "human_request.resolved"
+
+HUMAN_REQUEST_CREATED = "human_request.created"
+HUMAN_REQUEST_RESOLVED = "human_request.resolved"
+HUMAN_REQUEST_EXPIRED = "human_request.expired"

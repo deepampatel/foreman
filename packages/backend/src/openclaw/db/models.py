@@ -426,3 +426,64 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 7: Human-in-the-loop
+# ══════════════════════════════════════════════════════════════
+
+
+class HumanRequest(Base):
+    """An agent's request for human input — question, approval, or review.
+
+    Learn: This is the bridge between AI agents and human oversight.
+    When an agent needs a decision, it creates a HumanRequest. The UI
+    shows it as a notification. The human responds via REST or WebSocket.
+    The dispatcher detects the resolution and continues the agent's work.
+
+    Kinds:
+    - 'question': Agent needs information (free-text answer)
+    - 'approval': Agent needs yes/no approval to proceed
+    - 'review': Agent needs a code/work review
+
+    All persistent — survives server restarts (unlike Delegate's in-memory state).
+    """
+
+    __tablename__ = "human_requests"
+    __table_args__ = (
+        Index("idx_human_requests_team_status", "team_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("teams.id"), nullable=False
+    )
+    agent_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("agents.id"), nullable=False
+    )
+    task_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("tasks.id"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(
+        String(30), nullable=False
+    )  # question, approval, review
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    options: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=False, server_default="{}"
+    )  # pre-defined answer options (for approval: ["approve", "reject"])
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="pending"
+    )  # pending, resolved, expired
+    response: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    responded_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )  # user UUID who responded
+    timeout_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
