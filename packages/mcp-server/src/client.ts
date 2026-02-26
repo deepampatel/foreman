@@ -556,4 +556,102 @@ export async function listHumanRequests(
   return request(`/api/v1/teams/${teamId}/human-requests`, { params });
 }
 
+// ─── Phase 8: Code Review + Merge ───────────────────────
+
+export interface ReviewComment {
+  id: number;
+  review_id: number;
+  author_id: string;
+  author_type: string;
+  file_path: string | null;
+  line_number: number | null;
+  content: string;
+  created_at: string;
+}
+
+export interface ReviewInfo {
+  id: number;
+  task_id: number;
+  attempt: number;
+  reviewer_id: string | null;
+  reviewer_type: string;
+  verdict: string | null;
+  summary: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  comments: ReviewComment[];
+}
+
+export interface MergeJobInfo {
+  id: number;
+  task_id: number;
+  repo_id: string;
+  status: string;
+  strategy: string;
+  error: string | null;
+  merge_commit: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MergeStatus {
+  task_id: number;
+  review_verdict: string | null;
+  review_attempt: number;
+  merge_jobs: MergeJobInfo[];
+  can_merge: boolean;
+}
+
+export async function requestReview(
+  taskId: number,
+  opts: { reviewer_id?: string; reviewer_type?: string } = {}
+): Promise<ReviewInfo> {
+  return request(`/api/v1/tasks/${taskId}/reviews`, {
+    method: "POST",
+    body: {
+      reviewer_id: opts.reviewer_id,
+      reviewer_type: opts.reviewer_type || "user",
+    },
+  });
+}
+
+export async function approveTask(
+  taskId: number,
+  opts: { summary?: string; reviewer_id?: string } = {}
+): Promise<ReviewInfo> {
+  return request(`/api/v1/tasks/${taskId}/approve`, {
+    method: "POST",
+    body: {
+      verdict: "approve",
+      summary: opts.summary,
+      reviewer_id: opts.reviewer_id,
+      reviewer_type: "user",
+    },
+  });
+}
+
+export async function rejectTask(
+  taskId: number,
+  opts: { summary?: string; reviewer_id?: string } = {}
+): Promise<ReviewInfo> {
+  return request(`/api/v1/tasks/${taskId}/reject`, {
+    method: "POST",
+    body: {
+      verdict: "reject",
+      summary: opts.summary,
+      reviewer_id: opts.reviewer_id,
+      reviewer_type: "user",
+    },
+  });
+}
+
+export async function getMergeStatus(taskId: number): Promise<MergeStatus> {
+  return request(`/api/v1/tasks/${taskId}/merge-status`);
+}
+
+export async function listReviews(taskId: number): Promise<ReviewInfo[]> {
+  return request(`/api/v1/tasks/${taskId}/reviews`);
+}
+
 // ... grows with each phase

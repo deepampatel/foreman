@@ -33,3 +33,13 @@ AGENT_BUDGET_EXCEEDED = "agent.budget_exceeded"
 HUMAN_REQUEST_CREATED = "human_request.created"
 HUMAN_REQUEST_RESOLVED = "human_request.resolved"
 HUMAN_REQUEST_EXPIRED = "human_request.expired"
+
+# ─── Phase 8: Code review + merge ──────────────────────
+
+REVIEW_CREATED = "review.created"
+REVIEW_VERDICT = "review.verdict"
+REVIEW_COMMENT_ADDED = "review.comment_added"
+MERGE_QUEUED = "merge.queued"
+MERGE_STARTED = "merge.started"
+MERGE_COMPLETED = "merge.completed"
+MERGE_FAILED = "merge.failed"

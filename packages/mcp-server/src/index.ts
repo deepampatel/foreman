@@ -903,6 +903,109 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════
+// Phase 8: Code Review + Merge
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "request_review",
+  "Request a code review for a task. Creates a new review attempt.",
+  {
+    task_id: z.number().describe("Task ID to review"),
+    reviewer_id: z.string().describe("Reviewer UUID (user or agent)").optional(),
+    reviewer_type: z.enum(["user", "agent"]).describe("Reviewer type").default("user"),
+  },
+  async (params) => {
+    try {
+      const review = await client.requestReview(params.task_id, {
+        reviewer_id: params.reviewer_id,
+        reviewer_type: params.reviewer_type,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(review, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "approve_task",
+  "Approve the latest review for a task. Marks it ready for merge.",
+  {
+    task_id: z.number().describe("Task ID to approve"),
+    summary: z.string().describe("Approval summary/notes").optional(),
+    reviewer_id: z.string().describe("Reviewer UUID").optional(),
+  },
+  async (params) => {
+    try {
+      const review = await client.approveTask(params.task_id, {
+        summary: params.summary,
+        reviewer_id: params.reviewer_id,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(review, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "reject_task",
+  "Reject the latest review for a task. Sends it back for more work.",
+  {
+    task_id: z.number().describe("Task ID to reject"),
+    summary: z.string().describe("Rejection reason/feedback").optional(),
+    reviewer_id: z.string().describe("Reviewer UUID").optional(),
+  },
+  async (params) => {
+    try {
+      const review = await client.rejectTask(params.task_id, {
+        summary: params.summary,
+        reviewer_id: params.reviewer_id,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(review, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_merge_status",
+  "Get the merge readiness status for a task — review verdict, merge jobs, can_merge flag.",
+  {
+    task_id: z.number().describe("Task ID"),
+  },
+  async (params) => {
+    try {
+      const status = await client.getMergeStatus(params.task_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(status, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ─── Start server ──────────────────────────────────────────
 
 async function main() {

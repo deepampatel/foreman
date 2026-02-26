@@ -487,3 +487,131 @@ class HumanRequest(Base):
     resolved_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+# ══════════════════════════════════════════════════════════════
+# Phase 8: Code Review + Merge
+# ══════════════════════════════════════════════════════════════
+
+
+class Review(Base):
+    """A code review for a task.
+
+    Learn: When a task moves to 'in_review', a review is created.
+    Reviewers (human or AI) examine the diff, leave comments,
+    and render a verdict: approve, request_changes, or reject.
+
+    Multiple review attempts are tracked via the 'attempt' field.
+    Each attempt is a fresh review cycle.
+    """
+
+    __tablename__ = "reviews"
+    __table_args__ = (
+        UniqueConstraint("task_id", "attempt", name="uq_reviews_task_attempt"),
+        Index("idx_reviews_task", "task_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tasks.id"), nullable=False
+    )
+    attempt: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    reviewer_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )  # user or agent UUID who reviewed
+    reviewer_type: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="user"
+    )  # "user" or "agent"
+    verdict: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True
+    )  # approve, request_changes, reject (null = pending)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Relationships
+    comments: Mapped[list["ReviewComment"]] = relationship(
+        back_populates="review", cascade="all, delete-orphan"
+    )
+
+
+class ReviewComment(Base):
+    """A comment on a specific file/line in a code review.
+
+    Learn: Review comments are anchored to a file path and optionally
+    a line number. This mirrors GitHub PR review comments.
+    """
+
+    __tablename__ = "review_comments"
+    __table_args__ = (
+        Index("idx_review_comments_review", "review_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    review_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("reviews.id"), nullable=False
+    )
+    author_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=False
+    )
+    author_type: Mapped[str] = mapped_column(
+        String(10), nullable=False
+    )  # "user" or "agent"
+    file_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    line_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    review: Mapped["Review"] = relationship(back_populates="comments")
+
+
+class MergeJob(Base):
+    """A merge job queued for background processing.
+
+    Learn: When a task is approved, a merge job is created and
+    pushed to the Redis merge queue. The merge worker picks it
+    up, rebases, runs tests, and merges. The result is recorded
+    here for auditability.
+
+    Statuses: queued → running → success / failed
+    """
+
+    __tablename__ = "merge_jobs"
+    __table_args__ = (
+        Index("idx_merge_jobs_task", "task_id"),
+        Index("idx_merge_jobs_status", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tasks.id"), nullable=False
+    )
+    repo_id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("repositories.id"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="queued"
+    )  # queued, running, success, failed
+    strategy: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="rebase"
+    )  # rebase, merge, squash
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    merge_commit: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True
+    )  # SHA of merge commit
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
