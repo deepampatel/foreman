@@ -521,7 +521,167 @@ server.tool(
 );
 
 // ═══════════════════════════════════════════════════════════
-// Phase 3+: More tools added per phase
+// Phase 3: Git — Worktrees, Diffs, Files
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "create_worktree",
+  "Create a git worktree for a task. Each task gets its own branch and isolated checkout.",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+  },
+  async (params) => {
+    try {
+      const info = await client.createWorktree(params.task_id, params.repo_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_worktree",
+  "Get info about a task's git worktree (path, branch, exists).",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+  },
+  async (params) => {
+    try {
+      const info = await client.getWorktreeInfo(params.task_id, params.repo_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "remove_worktree",
+  "Remove a task's git worktree (after merge or cancellation).",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+  },
+  async (params) => {
+    try {
+      const result = await client.removeWorktree(params.task_id, params.repo_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_task_diff",
+  "Get the full git diff of a task's branch vs the default branch.",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+  },
+  async (params) => {
+    try {
+      const result = await client.getTaskDiff(params.task_id, params.repo_id);
+      return {
+        content: [{ type: "text" as const, text: result.diff || "(no changes)" }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_changed_files",
+  "List files changed on a task's branch (with additions/deletions count).",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+  },
+  async (params) => {
+    try {
+      const files = await client.getChangedFiles(params.task_id, params.repo_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(files, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "read_file",
+  "Read a file from a task's branch (without needing the worktree checked out).",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+    path: z.string().describe("File path relative to repo root"),
+  },
+  async (params) => {
+    try {
+      const result = await client.getFileContent(params.task_id, params.repo_id, params.path);
+      return {
+        content: [{ type: "text" as const, text: result.content }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_commits",
+  "Get the commit log for a task's branch (commits not on the default branch).",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+    limit: z.number().describe("Max commits to return").default(20),
+  },
+  async (params) => {
+    try {
+      const commits = await client.getCommitLog(params.task_id, params.repo_id, params.limit);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(commits, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════
+// Phase 4+: More tools added per phase
 // ═══════════════════════════════════════════════════════════
 
 // ─── Start server ──────────────────────────────────────────

@@ -301,6 +301,80 @@ export async function getInbox(
 }
 
 // ─── Phase 3: Git ──────────────────────────────────────────
-// (added in Phase 3)
+
+export interface WorktreeInfo {
+  path: string;
+  branch: string;
+  exists: boolean;
+  repo_path: string;
+  repo_name: string;
+}
+
+export interface DiffFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface Commit {
+  hash: string;
+  author_name: string;
+  author_email: string;
+  message: string;
+  date: string;
+}
+
+export async function createWorktree(taskId: number, repoId: string): Promise<WorktreeInfo> {
+  return request(`/api/v1/tasks/${taskId}/worktree`, {
+    method: "POST",
+    params: { repo_id: repoId },
+  });
+}
+
+export async function removeWorktree(taskId: number, repoId: string): Promise<{ removed: boolean }> {
+  return request(`/api/v1/tasks/${taskId}/worktree`, {
+    method: "DELETE",
+    params: { repo_id: repoId },
+  });
+}
+
+export async function getWorktreeInfo(taskId: number, repoId: string): Promise<WorktreeInfo> {
+  return request(`/api/v1/tasks/${taskId}/worktree`, {
+    params: { repo_id: repoId },
+  });
+}
+
+export async function getTaskDiff(taskId: number, repoId: string): Promise<{ diff: string }> {
+  return request(`/api/v1/tasks/${taskId}/diff`, {
+    params: { repo_id: repoId },
+  });
+}
+
+export async function getChangedFiles(taskId: number, repoId: string): Promise<DiffFile[]> {
+  return request(`/api/v1/tasks/${taskId}/files`, {
+    params: { repo_id: repoId },
+  });
+}
+
+export async function getFileContent(
+  taskId: number,
+  repoId: string,
+  filePath: string
+): Promise<{ path: string; content: string }> {
+  return request(`/api/v1/tasks/${taskId}/file`, {
+    params: { repo_id: repoId, path: filePath },
+  });
+}
+
+export async function getCommitLog(
+  taskId: number,
+  repoId: string,
+  limit: number = 20
+): Promise<Commit[]> {
+  return request(`/api/v1/tasks/${taskId}/commits`, {
+    params: { repo_id: repoId, limit: String(limit) },
+  });
+}
 
 // ... grows with each phase
