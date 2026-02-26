@@ -1,91 +1,86 @@
 /**
- * Root application component.
+ * Root application component with routing.
  *
- * Learn: React Router v7 for page routing. TanStack Query for data fetching.
- * This starts minimal and grows with each phase.
- *
- * Phase 0: Just a health check display
- * Phase 5: Full dashboard with tasks, agents, chat, etc.
+ * Learn: Uses React Router v7 for page navigation.
+ * Team selection is managed via URL params and local state.
+ * The sidebar provides navigation between dashboard sections.
  */
 
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "./api/client";
+import { useState } from "react";
+import { Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { useOrgs, useTeams } from "./hooks/useApi";
+import { Dashboard } from "./pages/Dashboard";
+import { Tasks } from "./pages/Tasks";
+import "./App.css";
 
 function App() {
-  const { data: health, isLoading, error } = useQuery({
-    queryKey: ["health"],
-    queryFn: () => apiClient.get<Record<string, string>>("/api/v1/health"),
-    refetchInterval: 10000,
-  });
+  const { data: orgs } = useOrgs();
+  const [orgId, setOrgId] = useState<string>("");
+  const { data: teams } = useTeams(orgId || undefined);
+  const [teamId, setTeamId] = useState<string>("");
+
+  // Auto-select first org and team
+  if (orgs?.length && !orgId) {
+    setOrgId(orgs[0].id);
+  }
+  if (teams?.length && !teamId) {
+    setTeamId(teams[0].id);
+  }
 
   return (
-    <div style={{ padding: "2rem", maxWidth: "800px", margin: "0 auto" }}>
-      <h1 style={{ fontSize: "2rem", marginBottom: "0.5rem" }}>
-        OpenClaw Platform
-      </h1>
-      <p style={{ color: "#888", marginBottom: "2rem" }}>
-        AI Developer Productivity — Management Layer for OpenClaw Agents
-      </p>
+    <div className="app">
+      {/* Sidebar */}
+      <nav className="sidebar">
+        <div className="sidebar-brand">
+          <h1>OpenClaw</h1>
+        </div>
 
-      <div
-        style={{
-          background: "#1a1a1a",
-          borderRadius: "8px",
-          padding: "1.5rem",
-          border: "1px solid #333",
-        }}
-      >
-        <h2 style={{ fontSize: "1rem", color: "#888", marginBottom: "1rem" }}>
-          System Health
-        </h2>
+        {/* Team selector */}
+        <div className="sidebar-section">
+          <label className="sidebar-label">Team</label>
+          {teams?.length ? (
+            <select
+              className="team-select"
+              value={teamId}
+              onChange={(e) => setTeamId(e.target.value)}
+            >
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="sidebar-empty">No teams</span>
+          )}
+        </div>
 
-        {isLoading && <p>Checking...</p>}
+        {/* Navigation */}
+        <div className="sidebar-nav">
+          <NavLink to="/dashboard" className="nav-link">
+            Dashboard
+          </NavLink>
+          <NavLink to="/tasks" className="nav-link">
+            Tasks
+          </NavLink>
+        </div>
+      </nav>
 
-        {error && (
-          <p style={{ color: "#ef4444" }}>
-            Error: {error instanceof Error ? error.message : "Unknown error"}
-          </p>
-        )}
-
-        {health && (
-          <div style={{ display: "grid", gap: "0.5rem" }}>
-            {Object.entries(health).map(([key, value]) => (
-              <div
-                key={key}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  padding: "0.5rem 0",
-                  borderBottom: "1px solid #222",
-                }}
-              >
-                <span style={{ color: "#aaa" }}>{key}</span>
-                <span
-                  style={{
-                    color: value === "ok" || value === "healthy"
-                      ? "#22c55e"
-                      : "#f59e0b",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {value}
-                </span>
-              </div>
-            ))}
+      {/* Main content */}
+      <main className="main-content">
+        {teamId ? (
+          <Routes>
+            <Route path="/dashboard" element={<Dashboard teamId={teamId} />} />
+            <Route path="/tasks" element={<Tasks teamId={teamId} />} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        ) : (
+          <div className="empty-state-page">
+            <h2>Welcome to OpenClaw</h2>
+            <p>Create an organization and team to get started.</p>
           </div>
         )}
-      </div>
-
-      <p
-        style={{
-          marginTop: "2rem",
-          color: "#555",
-          fontSize: "0.85rem",
-          textAlign: "center",
-        }}
-      >
-        Phase 0 — Skeleton. Dashboard, tasks, and agents coming in Phase 5.
-      </p>
+      </main>
     </div>
   );
 }

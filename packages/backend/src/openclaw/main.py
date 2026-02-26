@@ -35,17 +35,24 @@ async def lifespan(app: FastAPI):
         port=settings.port,
     )
 
-    # Future phases add:
-    # - Alembic auto-migration check
-    # - Redis connection pool
-    # - Background task dispatcher
+    # Initialize Redis connection pool (Phase 5)
+    from openclaw.realtime.pubsub import close_redis, init_redis
+    try:
+        await init_redis()
+        logger.info("openclaw.redis_connected", url=settings.redis_url)
+    except Exception as e:
+        logger.warning("openclaw.redis_unavailable", error=str(e))
+        # Redis is optional — app works without real-time features
 
     yield
 
     # Shutdown
     logger.info("openclaw.shutdown")
 
-    # Future: close engine, Redis pool, etc.
+    # Close Redis
+    await close_redis()
+
+    # Close database engine
     from openclaw.db.engine import engine
     await engine.dispose()
 
@@ -73,6 +80,10 @@ def create_app() -> FastAPI:
 
     # Mount API routes
     app.include_router(api_router)
+
+    # Mount WebSocket route (Phase 5 — real-time events)
+    from openclaw.realtime.websocket import router as ws_router
+    app.include_router(ws_router)
 
     return app
 
