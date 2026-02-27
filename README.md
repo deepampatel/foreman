@@ -167,6 +167,30 @@ uv run pytest tests/ -v    # 147 tests, ~10s
 
 Per-test savepoint rollback — fully isolated, no cleanup, runs against real Postgres.
 
+## Guides
+
+Learn how to actually use Entourage day-to-day:
+
+| Guide | What you'll learn |
+|-------|-------------------|
+| [Getting Started](docs/guides/getting-started.md) | Zero to a working AI team in 5 minutes |
+| [Daily Workflow](docs/guides/daily-workflow.md) | What a typical day looks like with governed agents |
+| [Multi-Agent Teams](docs/guides/multi-agent-team.md) | Manager + engineers coordinating on complex features |
+| [Cost Control](docs/guides/cost-control.md) | Budget caps, per-task tracking, preventing runaway spend |
+| [Webhook Automation](docs/guides/webhook-automation.md) | GitHub issues auto-create tasks for your agents |
+
+## Examples
+
+Runnable scripts you can try right now ([examples/](examples/)):
+
+```bash
+python examples/quickstart.py           # Full lifecycle in 30 seconds
+python examples/multi_agent.py          # Two agents coordinating
+python examples/human_in_the_loop.py    # Agent pauses, asks human, continues
+python examples/code_review_flow.py     # Review → comments → approve → merge
+python examples/webhook_automation.py   # GitHub webhook + HMAC verification
+```
+
 ## Documentation
 
 | Doc | What's inside |
