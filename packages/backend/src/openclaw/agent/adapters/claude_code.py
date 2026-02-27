@@ -44,6 +44,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         team_id: str,
         task_id: int,
         role: str = "engineer",
+        conventions: list[dict] | None = None,
     ) -> str:
         """Build the prompt that tells Claude Code how to use Entourage MCP tools.
 
@@ -52,16 +53,19 @@ class ClaudeCodeAdapter(AgentAdapter):
         - Which MCP tools to call and when
         - How to handle human-in-the-loop (ask_human with wait=true)
         - When to signal completion
+        - Team conventions (coding standards, architecture decisions)
 
         For manager role, includes orchestration instructions (batch tasks,
         delegate to engineers, wait for completion, etc.).
         """
         if role == "manager":
             return self._build_manager_prompt(
-                task_title, task_description, agent_id, team_id, task_id
+                task_title, task_description, agent_id, team_id, task_id,
+                conventions=conventions,
             )
         return self._build_engineer_prompt(
-            task_title, task_description, agent_id, team_id, task_id
+            task_title, task_description, agent_id, team_id, task_id,
+            conventions=conventions,
         )
 
     def _build_engineer_prompt(
@@ -71,8 +75,16 @@ class ClaudeCodeAdapter(AgentAdapter):
         agent_id: str,
         team_id: str,
         task_id: int,
+        conventions: list[dict] | None = None,
     ) -> str:
         """Engineer prompt — focuses on writing code and completing a single task."""
+        conventions_section = ""
+        if conventions:
+            lines = ["TEAM CONVENTIONS:", "Follow these team standards:"]
+            for c in conventions:
+                lines.append(f"- {c['key']}: {c['content']}")
+            conventions_section = "\n".join(lines) + "\n\n"
+
         return f"""You are an Entourage engineer agent working on a task.
 
 TASK #{task_id}: {task_title}
@@ -80,16 +92,22 @@ TASK #{task_id}: {task_title}
 DESCRIPTION:
 {task_description}
 
-INSTRUCTIONS:
+{conventions_section}INSTRUCTIONS:
 You have access to Entourage MCP tools for task management and coordination.
 Work on the task using your normal coding abilities (read files, write files,
 run commands, etc.) and use these Entourage MCP tools as needed:
 
-1. TASK STATUS: When you start working, the task is already in_progress.
+1. FIRST: Check your inbox for review feedback or messages:
+   mcp__entourage__get_inbox(agent_id="{agent_id}")
+   If there are review comments, read them carefully and address each one.
+   You can also check the latest review:
+   mcp__entourage__get_review_feedback(task_id={task_id})
+
+2. TASK STATUS: When you start working, the task is already in_progress.
    When you're done, call:
    mcp__entourage__change_task_status(task_id={task_id}, status="in_review", actor_id="{agent_id}")
 
-2. HUMAN INPUT: If you need a decision from a human, call:
+3. HUMAN INPUT: If you need a decision from a human, call:
    mcp__entourage__ask_human(
      team_id="{team_id}", agent_id="{agent_id}",
      kind="question", question="your question here",
@@ -97,13 +115,13 @@ run commands, etc.) and use these Entourage MCP tools as needed:
    )
    This will BLOCK until the human responds, then return their answer.
 
-3. MESSAGES: To communicate with other agents, call:
+4. MESSAGES: To communicate with other agents, call:
    mcp__entourage__send_message(
      team_id="{team_id}", sender_id="{agent_id}",
      recipient_id="<other_agent_id>", body="your message"
    )
 
-4. COMMENTS: To add notes to the task, call:
+5. COMMENTS: To add notes to the task, call:
    mcp__entourage__add_task_comment(task_id={task_id}, body="your comment")
 
 YOUR IDENTITY:
@@ -122,8 +140,16 @@ the task to in_review status.
         agent_id: str,
         team_id: str,
         task_id: int,
+        conventions: list[dict] | None = None,
     ) -> str:
         """Manager prompt — focuses on decomposing work and orchestrating engineers."""
+        conventions_section = ""
+        if conventions:
+            lines = ["TEAM CONVENTIONS:", "Ensure all sub-tasks follow these team standards:"]
+            for c in conventions:
+                lines.append(f"- {c['key']}: {c['content']}")
+            conventions_section = "\n".join(lines) + "\n\n"
+
         return f"""You are an Entourage MANAGER agent responsible for orchestrating work.
 
 TASK #{task_id}: {task_title}
@@ -131,7 +157,7 @@ TASK #{task_id}: {task_title}
 DESCRIPTION:
 {task_description}
 
-YOUR ROLE:
+{conventions_section}YOUR ROLE:
 You are a manager. You do NOT write code yourself. Instead, you:
 1. Break down the task into sub-tasks
 2. Assign sub-tasks to engineer agents

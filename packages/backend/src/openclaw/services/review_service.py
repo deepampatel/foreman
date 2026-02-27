@@ -24,6 +24,7 @@ from openclaw.events.types import (
     MERGE_QUEUED,
     REVIEW_COMMENT_ADDED,
     REVIEW_CREATED,
+    REVIEW_FEEDBACK_SENT,
     REVIEW_VERDICT,
 )
 
@@ -191,8 +192,79 @@ class ReviewService:
         )
 
         await self.db.commit()
+
+        # ── Handle request_changes: send feedback + re-dispatch ──
+        if verdict == "request_changes":
+            await self._handle_request_changes(review, summary)
+
         # Re-fetch with eagerly loaded comments
         return await self.get_review(review.id)
+
+    # ─── Handle request_changes ────────────────────────────
+
+    async def _handle_request_changes(
+        self,
+        review: Review,
+        summary: Optional[str] = None,
+    ) -> None:
+        """Close the feedback loop: send review comments to agent and re-dispatch.
+
+        Learn: This is what makes the review cycle autonomous. When a reviewer
+        gives "request_changes":
+        1. Collect all review comments into a formatted feedback message
+        2. Transition the task back to in_progress
+        3. Send the feedback as a message to the assignee agent
+        4. The message INSERT triggers PG NOTIFY → dispatcher → agent re-runs
+
+        The agent's prompt tells it to check its inbox first, so it will
+        read the feedback and address each comment.
+        """
+        from openclaw.services.task_service import MessageService, TaskService
+
+        task = await self.db.get(Task, review.task_id)
+        if not task or not task.assignee_id:
+            return  # No assignee to notify
+
+        # ── Format feedback from review comments ──────────────
+        comments = review.comments or []
+        feedback_lines = [f"## Review Feedback (Attempt #{review.attempt})"]
+        if summary:
+            feedback_lines.append(f"\n**Summary:** {summary}\n")
+        if comments:
+            feedback_lines.append("**Comments to address:**")
+            for c in comments:
+                loc = f"{c.file_path}:{c.line_number}" if c.file_path else "General"
+                feedback_lines.append(f"- **{loc}**: {c.content}")
+        feedback_text = "\n".join(feedback_lines)
+
+        # ── Transition task back to in_progress ───────────────
+        task_svc = TaskService(self.db)
+        await task_svc.change_status(review.task_id, "in_progress")
+
+        # ── Send feedback message to the assignee agent ───────
+        msg_svc = MessageService(self.db)
+        await msg_svc.send_message(
+            team_id=task.team_id,
+            sender_id=review.reviewer_id or task.team_id,
+            sender_type=review.reviewer_type or "user",
+            recipient_id=task.assignee_id,
+            recipient_type="agent",
+            content=feedback_text,
+            task_id=review.task_id,
+        )
+
+        # ── Record feedback event ─────────────────────────────
+        await self.events.append(
+            stream_id=f"task:{review.task_id}",
+            event_type=REVIEW_FEEDBACK_SENT,
+            data={
+                "review_id": review.id,
+                "task_id": review.task_id,
+                "assignee_id": str(task.assignee_id),
+                "comment_count": len(comments),
+            },
+        )
+        await self.db.commit()
 
     # ─── Get review ───────────────────────────────────────
 

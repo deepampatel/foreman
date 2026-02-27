@@ -681,6 +681,43 @@ export async function listReviews(taskId: number): Promise<ReviewInfo[]> {
   return request(`/api/v1/tasks/${taskId}/reviews`);
 }
 
+/**
+ * Get the latest review feedback for a task — formatted for agent consumption.
+ *
+ * Learn: Agents call this to read review comments when re-dispatched after
+ * a request_changes verdict. Returns the latest review with verdict + comments.
+ */
+export async function getReviewFeedback(taskId: number): Promise<{
+  has_feedback: boolean;
+  review: ReviewInfo | null;
+  formatted_feedback: string;
+}> {
+  const reviews = await listReviews(taskId);
+  const latestWithChanges = reviews.find(r => r.verdict === "request_changes");
+
+  if (!latestWithChanges) {
+    return { has_feedback: false, review: null, formatted_feedback: "No review feedback found." };
+  }
+
+  const lines: string[] = [`## Review Feedback (Attempt #${latestWithChanges.attempt})`];
+  if (latestWithChanges.summary) {
+    lines.push(`\n**Summary:** ${latestWithChanges.summary}\n`);
+  }
+  if (latestWithChanges.comments.length > 0) {
+    lines.push("**Comments to address:**");
+    for (const c of latestWithChanges.comments) {
+      const loc = c.file_path ? `${c.file_path}:${c.line_number || ""}` : "General";
+      lines.push(`- **${loc}**: ${c.content}`);
+    }
+  }
+
+  return {
+    has_feedback: true,
+    review: latestWithChanges,
+    formatted_feedback: lines.join("\n"),
+  };
+}
+
 // ─── Phase 9: Auth ──────────────────────────────────────
 
 export interface AuthIdentity {
@@ -813,6 +850,30 @@ export async function updateTeamSettings(
   return request(`/api/v1/settings/teams/${teamId}`, {
     method: "PATCH",
     body: settings,
+  });
+}
+
+// ─── Team Conventions ───────────────────────────────────
+
+export interface Convention {
+  key: string;
+  content: string;
+  active: boolean;
+}
+
+export async function getTeamConventions(teamId: string): Promise<Convention[]> {
+  return request(`/api/v1/settings/teams/${teamId}/conventions`);
+}
+
+export async function addTeamConvention(
+  teamId: string,
+  key: string,
+  content: string,
+  active: boolean = true
+): Promise<Convention> {
+  return request(`/api/v1/settings/teams/${teamId}/conventions`, {
+    method: "POST",
+    body: { key, content, active },
   });
 }
 

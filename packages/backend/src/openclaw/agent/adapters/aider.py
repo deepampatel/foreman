@@ -43,6 +43,7 @@ class AiderAdapter(AgentAdapter):
         team_id: str,
         task_id: int,
         role: str = "engineer",
+        conventions: list[dict] | None = None,
     ) -> str:
         """Build the prompt for Aider with REST API instructions.
 

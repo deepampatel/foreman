@@ -102,6 +102,7 @@ class AgentAdapter(ABC):
         team_id: str,
         task_id: int,
         role: str = "engineer",
+        conventions: list[dict] | None = None,
     ) -> str:
         """Construct the prompt / initial instruction for the coding agent.
 
@@ -109,6 +110,7 @@ class AgentAdapter(ABC):
         - Task context (title, description)
         - Entourage MCP tool usage instructions
         - Agent identity (agent_id, team_id) for tool calls
+        - Team conventions (coding standards, architecture decisions)
 
         The role param ("engineer" or "manager") allows adapters to
         produce different prompts for different agent roles.

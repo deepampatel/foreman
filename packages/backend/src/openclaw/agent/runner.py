@@ -25,7 +25,7 @@ import redis.asyncio as aioredis
 from openclaw.agent.adapters import AdapterConfig, get_adapter
 from openclaw.config import settings
 from openclaw.db.engine import async_session_factory
-from openclaw.db.models import Agent, Task
+from openclaw.db.models import Agent, Task, Team
 from openclaw.events.store import EventStore
 from openclaw.events.types import (
     AGENT_RUN_COMPLETED,
@@ -139,6 +139,16 @@ class AgentRunner:
             )
             await db.commit()
 
+        # ── Load team conventions ─────────────────────────────
+        conventions = []
+        async with async_session_factory() as db:
+            team = await db.get(Team, _uuid.UUID(effective_team_id))
+            if team and team.config:
+                conventions = [
+                    c for c in team.config.get("conventions", [])
+                    if c.get("active", True)
+                ]
+
         # ── Build prompt ──────────────────────────────────────
         prompt = prompt_override or adapter.build_prompt(
             task_title=task.title if task else "General work",
@@ -147,6 +157,7 @@ class AgentRunner:
             team_id=effective_team_id,
             task_id=task_id or 0,
             role=agent.role,
+            conventions=conventions or None,
         )
 
         # ── Build adapter config ──────────────────────────────

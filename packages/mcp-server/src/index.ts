@@ -1017,6 +1017,27 @@ server.tool(
   }
 );
 
+server.tool(
+  "get_review_feedback",
+  "Get the latest review feedback for a task — comments, verdict, and summary from the most recent request_changes review. Use this to understand what the reviewer wants you to fix.",
+  {
+    task_id: z.number().describe("Task ID"),
+  },
+  async (params) => {
+    try {
+      const feedback = await client.getReviewFeedback(params.task_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(feedback, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ═══════════════════════════════════════════════════════════
 // Phase 9: Authentication
 // ═══════════════════════════════════════════════════════════
@@ -1173,6 +1194,56 @@ server.tool(
       const result = await client.updateTeamSettings(team_id, cleanSettings);
       return {
         content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_team_conventions",
+  "Get team coding conventions — standards, architecture decisions, testing strategies. These are injected into agent prompts automatically.",
+  {
+    team_id: z.string().describe("Team UUID"),
+  },
+  async (params) => {
+    try {
+      const conventions = await client.getTeamConventions(params.team_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(conventions, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "add_team_convention",
+  "Record a new team convention — coding standard, architecture decision, or workflow preference. Agents will follow this in future runs.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    key: z.string().describe("Convention identifier (e.g. 'testing', 'code_style', 'architecture')"),
+    content: z.string().describe("The convention text — what agents should follow"),
+    active: z.boolean().describe("Whether the convention is active").default(true),
+  },
+  async (params) => {
+    try {
+      const convention = await client.addTeamConvention(
+        params.team_id,
+        params.key,
+        params.content,
+        params.active
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(convention, null, 2) }],
       };
     } catch (error) {
       return {

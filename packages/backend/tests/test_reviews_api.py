@@ -286,6 +286,92 @@ async def test_request_changes_verdict(client):
 
 
 @pytest.mark.asyncio
+async def test_request_changes_sends_feedback_and_redispatches(client):
+    """request_changes closes the feedback loop: transitions task to in_progress + sends message to agent.
+
+    Learn: This is the core autonomy feature. When a reviewer gives request_changes:
+    1. Task transitions from in_review → in_progress
+    2. A message with formatted review comments is sent to the assignee agent
+    3. The message triggers PG NOTIFY → dispatcher → agent re-runs with feedback
+    """
+    ids = await _setup(client)
+
+    # Assign task to engineer and move to in_review
+    await client.post(
+        f"/api/v1/tasks/{ids['task_id']}/assign",
+        json={"assignee_id": ids["engineer_id"]},
+    )
+    await client.post(
+        f"/api/v1/tasks/{ids['task_id']}/status",
+        json={"status": "in_progress"},
+    )
+    await client.post(
+        f"/api/v1/tasks/{ids['task_id']}/status",
+        json={"status": "in_review"},
+    )
+
+    # Create review + add comments
+    r = await client.post(
+        f"/api/v1/tasks/{ids['task_id']}/reviews",
+        json={"reviewer_id": ids["manager_id"], "reviewer_type": "agent"},
+    )
+    review_id = r.json()["id"]
+
+    await client.post(
+        f"/api/v1/reviews/{review_id}/comments",
+        json={
+            "author_id": ids["manager_id"],
+            "author_type": "agent",
+            "file_path": "src/api.py",
+            "line_number": 42,
+            "content": "Missing error handling for 404 case",
+        },
+    )
+    await client.post(
+        f"/api/v1/reviews/{review_id}/comments",
+        json={
+            "author_id": ids["manager_id"],
+            "author_type": "agent",
+            "content": "Add unit tests for the new endpoint",
+        },
+    )
+
+    # Submit request_changes verdict
+    r = await client.post(
+        f"/api/v1/reviews/{review_id}/verdict",
+        json={
+            "verdict": "request_changes",
+            "summary": "Two things to fix: error handling and tests.",
+            "reviewer_id": ids["manager_id"],
+            "reviewer_type": "agent",
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["verdict"] == "request_changes"
+
+    # ── Verify: task transitioned back to in_progress ──
+    r = await client.get(f"/api/v1/tasks/{ids['task_id']}")
+    assert r.json()["status"] == "in_progress"
+
+    # ── Verify: message sent to the assignee agent with review feedback ──
+    r = await client.get(f"/api/v1/agents/{ids['engineer_id']}/inbox")
+    messages = r.json()
+    assert len(messages) >= 1
+    feedback_msg = messages[0]
+    assert "Review Feedback" in feedback_msg["content"]
+    assert "src/api.py:42" in feedback_msg["content"]
+    assert "Missing error handling" in feedback_msg["content"]
+    assert "Add unit tests" in feedback_msg["content"]
+    assert "Two things to fix" in feedback_msg["content"]
+
+    # ── Verify: event trail contains review.feedback_sent ──
+    r = await client.get(f"/api/v1/tasks/{ids['task_id']}/events")
+    events = r.json()
+    event_types = [e["type"] for e in events]
+    assert "review.feedback_sent" in event_types
+
+
+@pytest.mark.asyncio
 async def test_double_verdict_blocked(client):
     """Can't submit verdict twice on same review."""
     ids = await _setup(client)
