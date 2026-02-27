@@ -1,5 +1,5 @@
 /**
- * OpenClaw Dashboard Styles
+ * Entourage Dashboard Styles
  * Dark theme, clean layout, real-time dashboard feel.
  */
 
@@ -385,4 +385,343 @@ body {
   color: #666;
   padding: 2rem;
   text-align: center;
+}
+
+/* ─── Agent Card Enhancements ────────────────────────── */
+
+.agent-adapter {
+  color: #555;
+  font-style: italic;
+}
+
+.agent-current-task {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #10b981;
+  line-height: 1.3;
+}
+
+.agent-run-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: #1f2937;
+  color: #93c5fd;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.agent-run-btn:hover:not(:disabled) {
+  background: #374151;
+  color: #bfdbfe;
+}
+
+.agent-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Task Card Enhancements ─────────────────────────── */
+
+.task-header-right {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.review-badge {
+  font-size: 0.65rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.review-badge-pending { background: #3b2f1e; color: #fbbf24; }
+.review-badge-approved { background: #1a2e1a; color: #4ade80; }
+.review-badge-rejected { background: #2a1a1a; color: #f87171; }
+.review-badge-changes { background: #2e2a1a; color: #fbbf24; }
+
+/* ─── Human Request Cards ────────────────────────────── */
+
+.hr-page h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+}
+
+.hr-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.hr-filter-btn {
+  padding: 0.4rem 1rem;
+  background: #1a1a1a;
+  color: #999;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hr-filter-btn:hover {
+  color: #fff;
+  border-color: #555;
+}
+
+.hr-filter-active {
+  background: #1f2937;
+  color: #93c5fd;
+  border-color: #374151;
+}
+
+.hr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.hr-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.hr-card-pending { border-left: 3px solid #f59e0b; }
+.hr-card-resolved { border-left: 3px solid #10b981; }
+.hr-card-expired { border-left: 3px solid #ef4444; }
+
+.hr-header {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.hr-id {
+  font-size: 0.75rem;
+  color: #666;
+  font-family: monospace;
+}
+
+.hr-kind {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.hr-status {
+  font-size: 0.7rem;
+  text-transform: capitalize;
+  margin-left: auto;
+}
+
+.hr-question {
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.hr-meta {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 0.75rem;
+}
+
+.hr-agent { color: #93c5fd; }
+.hr-task { color: #c084fc; }
+.hr-time { margin-left: auto; }
+
+.hr-options {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.hr-option-btn {
+  padding: 0.35rem 0.75rem;
+  background: #1f2937;
+  color: #e0e0e0;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hr-option-btn:hover:not(:disabled) {
+  background: #374151;
+}
+
+.hr-option-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hr-respond-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.hr-respond-input {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.hr-respond-input:focus {
+  outline: none;
+  border-color: #555;
+}
+
+.hr-respond-btn {
+  padding: 0.4rem 1rem;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.hr-respond-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.hr-respond-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.hr-response {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #1a2e1a;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #6ee7b7;
+}
+
+.hr-response-label {
+  font-weight: 600;
+  color: #4ade80;
+}
+
+/* ─── Review Panel ───────────────────────────────────── */
+
+.review-panel {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-top: 0.5rem;
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.review-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #999;
+}
+
+.review-verdict {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.review-pending { color: #f59e0b; }
+
+.review-summary {
+  font-size: 0.85rem;
+  color: #ccc;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.review-comments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.review-comment {
+  padding: 0.5rem;
+  background: #1a1a1a;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.review-comment-file {
+  display: block;
+  font-family: monospace;
+  font-size: 0.7rem;
+  color: #818cf8;
+  margin-bottom: 0.25rem;
+}
+
+.review-comment-text {
+  color: #ccc;
+  line-height: 1.4;
+}
+
+.review-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.review-btn {
+  padding: 0.4rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.review-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.review-btn-approve {
+  background: #1a2e1a;
+  color: #4ade80;
+}
+
+.review-btn-approve:hover:not(:disabled) {
+  background: #1e3a2e;
+}
+
+.review-btn-reject {
+  background: #2a1a1a;
+  color: #f87171;
+}
+
+.review-btn-reject:hover:not(:disabled) {
+  background: #3a1a1a;
 }

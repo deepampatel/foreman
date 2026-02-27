@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { useOrgs, useTeams } from "./hooks/useApi";
 import { Dashboard } from "./pages/Dashboard";
+import { HumanRequests } from "./pages/HumanRequests";
 import { Tasks } from "./pages/Tasks";
 import "./App.css";
 
@@ -32,7 +33,7 @@ function App() {
       {/* Sidebar */}
       <nav className="sidebar">
         <div className="sidebar-brand">
-          <h1>OpenClaw</h1>
+          <h1>Entourage</h1>
         </div>
 
         {/* Team selector */}
@@ -63,6 +64,9 @@ function App() {
           <NavLink to="/tasks" className="nav-link">
             Tasks
           </NavLink>
+          <NavLink to="/requests" className="nav-link">
+            Requests
+          </NavLink>
         </div>
       </nav>
 
@@ -72,11 +76,12 @@ function App() {
           <Routes>
             <Route path="/dashboard" element={<Dashboard teamId={teamId} />} />
             <Route path="/tasks" element={<Tasks teamId={teamId} />} />
+            <Route path="/requests" element={<HumanRequests teamId={teamId} />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         ) : (
           <div className="empty-state-page">
-            <h2>Welcome to OpenClaw</h2>
+            <h2>Welcome to Entourage</h2>
             <p>Create an organization and team to get started.</p>
           </div>
         )}

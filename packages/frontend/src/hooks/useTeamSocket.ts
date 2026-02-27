@@ -54,6 +54,38 @@ export function useTeamSocket(teamId: string | undefined) {
             queryClient.invalidateQueries({ queryKey: ["messages", teamId] });
             break;
 
+          case "human_request.created":
+          case "human_request.resolved":
+          case "human_request.expired":
+            queryClient.invalidateQueries({
+              queryKey: ["human-requests", teamId],
+            });
+            break;
+
+          case "review.requested":
+          case "review.verdict":
+          case "review.comment_added":
+            queryClient.invalidateQueries({ queryKey: ["tasks", teamId] });
+            if (msg.task_id) {
+              queryClient.invalidateQueries({
+                queryKey: ["reviews", msg.task_id],
+              });
+            }
+            break;
+
+          case "merge.started":
+          case "merge.completed":
+          case "merge.failed":
+            queryClient.invalidateQueries({ queryKey: ["tasks", teamId] });
+            break;
+
+          case "agent.run_started":
+          case "agent.run_completed":
+          case "agent.run_failed":
+            queryClient.invalidateQueries({ queryKey: ["agents", teamId] });
+            queryClient.invalidateQueries({ queryKey: ["costs", teamId] });
+            break;
+
           default:
             // Unknown event type — invalidate everything for safety
             queryClient.invalidateQueries({ queryKey: ["tasks", teamId] });

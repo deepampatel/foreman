@@ -1,30 +1,57 @@
 /**
- * Task card — shows task title, status, priority, and assignee.
+ * Task card — shows task title, status, priority, assignee, and review badge.
+ *
+ * Learn: Enhanced to show review verdict badge inline when the task has
+ * an associated review. Clicking could expand to show review details
+ * (future enhancement).
  */
 
-import type { Agent, Task } from "../api/types";
+import type { Agent, Review, Task } from "../api/types";
 import { PRIORITY_COLORS, STATUS_LABELS, type Priority, type TaskStatus } from "../api/types";
 
 interface TaskCardProps {
   task: Task;
   agents?: Agent[];
+  review?: Review;
 }
 
-export function TaskCard({ task, agents }: TaskCardProps) {
+const VERDICT_BADGE: Record<string, { label: string; className: string }> = {
+  approve: { label: "Approved", className: "review-badge-approved" },
+  reject: { label: "Rejected", className: "review-badge-rejected" },
+  request_changes: { label: "Changes", className: "review-badge-changes" },
+};
+
+export function TaskCard({ task, agents, review }: TaskCardProps) {
   const assignee = agents?.find((a) => a.id === task.assignee_id);
   const statusLabel = STATUS_LABELS[task.status as TaskStatus] || task.status;
   const priorityColor = PRIORITY_COLORS[task.priority as Priority] || "#6b7280";
+
+  const verdictInfo = review?.verdict
+    ? VERDICT_BADGE[review.verdict]
+    : null;
 
   return (
     <div className="task-card">
       <div className="task-header">
         <span className="task-id">#{task.id}</span>
-        <span
-          className="task-priority"
-          style={{ color: priorityColor }}
-        >
-          {task.priority}
-        </span>
+        <div className="task-header-right">
+          {/* Review badge */}
+          {review && (
+            <span
+              className={`review-badge ${
+                verdictInfo?.className || "review-badge-pending"
+              }`}
+            >
+              {verdictInfo?.label || "In Review"}
+            </span>
+          )}
+          <span
+            className="task-priority"
+            style={{ color: priorityColor }}
+          >
+            {task.priority}
+          </span>
+        </div>
       </div>
       <div className="task-title">{task.title}</div>
       <div className="task-footer">

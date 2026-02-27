@@ -117,3 +117,68 @@ export const PRIORITY_COLORS: Record<Priority, string> = {
   high: "#f59e0b",
   critical: "#ef4444",
 };
+
+// ─── Human Requests ─────────────────────────────────────
+
+export interface HumanRequest {
+  id: number;
+  team_id: string;
+  agent_id: string;
+  task_id: number | null;
+  kind: string; // "question" | "approval" | "review"
+  question: string;
+  options: string[];
+  status: string; // "pending" | "resolved" | "expired"
+  response: string | null;
+  responded_by: string | null;
+  timeout_at: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+// ─── Reviews ────────────────────────────────────────────
+
+export interface ReviewComment {
+  id: number;
+  review_id: number;
+  author_id: string;
+  author_type: string;
+  file_path: string | null;
+  line_number: number | null;
+  content: string;
+  created_at: string;
+}
+
+export interface Review {
+  id: number;
+  task_id: number;
+  attempt: number;
+  reviewer_id: string | null;
+  reviewer_type: string;
+  verdict: string | null; // "approve" | "request_changes" | "reject" | null
+  summary: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  comments: ReviewComment[];
+}
+
+export interface MergeJob {
+  id: number;
+  task_id: number;
+  repo_id: string;
+  status: string;
+  strategy: string;
+  error: string | null;
+  merge_commit: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
+export interface MergeStatus {
+  task_id: number;
+  review_verdict: string | null;
+  review_attempt: number;
+  merge_jobs: MergeJob[];
+  can_merge: boolean;
+}

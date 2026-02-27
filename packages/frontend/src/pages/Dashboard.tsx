@@ -1,16 +1,24 @@
 /**
- * Dashboard page — overview of team activity, stats, and agents.
+ * Dashboard page — overview of team activity, stats, agents, and pending requests.
  *
- * Learn: The dashboard uses TanStack Query hooks for data fetching
- * and useTeamSocket for real-time updates. When a WebSocket event
- * arrives, the relevant query cache is invalidated and the UI
- * re-renders with fresh data.
+ * Learn: Enhanced from basic overview to include:
+ * - Pending human requests section with inline respond forms
+ * - Agent cards with current task and run button
+ * - Stats row with pending request count
  */
 
 import { AgentCard } from "../components/AgentCard";
+import { HumanRequestCard } from "../components/HumanRequestCard";
 import { StatCard } from "../components/StatCard";
 import { TaskCard } from "../components/TaskCard";
-import { useAgents, useCosts, useTasks } from "../hooks/useApi";
+import {
+  useAgents,
+  useCosts,
+  useHumanRequests,
+  useRespondToRequest,
+  useRunAgent,
+  useTasks,
+} from "../hooks/useApi";
 import { useTeamSocket } from "../hooks/useTeamSocket";
 
 interface DashboardProps {
@@ -24,11 +32,22 @@ export function Dashboard({ teamId }: DashboardProps) {
   const { data: tasks } = useTasks(teamId);
   const { data: agents } = useAgents(teamId);
   const { data: costs } = useCosts(teamId);
+  const { data: pendingRequests } = useHumanRequests(teamId, "pending");
+  const respondMutation = useRespondToRequest(teamId);
+  const runAgentMutation = useRunAgent(teamId);
 
   const activeTasks = tasks?.filter(
     (t) => !["done", "cancelled"].includes(t.status)
   );
   const workingAgents = agents?.filter((a) => a.status === "working");
+
+  const handleRespond = (requestId: number, response: string) => {
+    respondMutation.mutate({ requestId, response });
+  };
+
+  const handleRunAgent = (agentId: string) => {
+    runAgentMutation.mutate({ agentId });
+  };
 
   return (
     <div className="dashboard">
@@ -45,21 +64,46 @@ export function Dashboard({ teamId }: DashboardProps) {
           value={`${workingAgents?.length ?? 0} / ${agents?.length ?? 0}`}
         />
         <StatCard
+          label="Pending Requests"
+          value={pendingRequests?.length ?? 0}
+          color={pendingRequests?.length ? "#f59e0b" : undefined}
+        />
+        <StatCard
           label="Cost (7d)"
           value={`$${(costs?.total_cost_usd ?? 0).toFixed(2)}`}
         />
-        <StatCard
-          label="Sessions (7d)"
-          value={costs?.session_count ?? 0}
-        />
       </div>
+
+      {/* Pending Human Requests */}
+      {pendingRequests && pendingRequests.length > 0 && (
+        <section className="dashboard-section">
+          <h2>Pending Requests</h2>
+          <div className="hr-list">
+            {pendingRequests.map((req) => (
+              <HumanRequestCard
+                key={req.id}
+                request={req}
+                agents={agents}
+                onRespond={handleRespond}
+                isResponding={respondMutation.isPending}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Agents Section */}
       <section className="dashboard-section">
         <h2>Agents</h2>
         <div className="agent-grid">
           {agents?.map((agent) => (
-            <AgentCard key={agent.id} agent={agent} />
+            <AgentCard
+              key={agent.id}
+              agent={agent}
+              tasks={tasks}
+              onRunAgent={handleRunAgent}
+              isRunning={runAgentMutation.isPending}
+            />
           ))}
           {agents?.length === 0 && (
             <p className="empty-state">No agents configured</p>
