@@ -28,15 +28,56 @@ import httpx
 # ---------------------------------------------------------------------------
 
 DEFAULT_API_URL = "http://localhost:8000"
+CREDENTIALS_PATH = os.path.expanduser("~/.entourage/credentials.json")
 
 
 def _api_url() -> str:
     return os.environ.get("OPENCLAW_API_URL", DEFAULT_API_URL).rstrip("/")
 
 
+def _load_credentials() -> dict:
+    """Load stored auth credentials from ~/.entourage/credentials.json."""
+    try:
+        with open(CREDENTIALS_PATH) as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
+
+def _save_credentials(creds: dict) -> None:
+    """Save auth credentials to ~/.entourage/credentials.json."""
+    os.makedirs(os.path.dirname(CREDENTIALS_PATH), exist_ok=True)
+    with open(CREDENTIALS_PATH, "w") as f:
+        json.dump(creds, f, indent=2)
+    # Restrict permissions (owner read/write only)
+    os.chmod(CREDENTIALS_PATH, 0o600)
+
+
+def _auth_headers() -> dict[str, str]:
+    """Build auth headers from stored credentials or env vars."""
+    # Env var overrides stored credentials
+    api_key = os.environ.get("OPENCLAW_API_KEY")
+    if api_key:
+        return {"X-API-Key": api_key}
+
+    creds = _load_credentials()
+
+    if creds.get("api_key"):
+        return {"X-API-Key": creds["api_key"]}
+
+    if creds.get("access_token"):
+        return {"Authorization": f"Bearer {creds['access_token']}"}
+
+    return {}
+
+
 def _client() -> httpx.AsyncClient:
     """Build an async HTTP client pointed at the Entourage backend."""
-    return httpx.AsyncClient(base_url=_api_url(), timeout=30.0)
+    return httpx.AsyncClient(
+        base_url=_api_url(),
+        timeout=30.0,
+        headers=_auth_headers(),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +164,60 @@ def _status_color(status: str) -> str:
 @click.version_option(version="0.1.0", prog_name="entourage")
 def main():
     """Entourage — dispatch coding agents and manage human-in-the-loop workflows."""
+
+
+# ---------------------------------------------------------------------------
+# entourage login / logout
+# ---------------------------------------------------------------------------
+
+
+@main.command()
+@click.option("--api-key", "-k", help="Authenticate with an API key instead of email/password")
+def login(api_key: Optional[str]):
+    """Authenticate with the Entourage backend.
+
+    Without --api-key: prompts for email and password (JWT auth).
+    With --api-key: stores the API key for future requests.
+    """
+    if api_key:
+        _save_credentials({"api_key": api_key})
+        click.secho("API key saved.", fg="green")
+        return
+
+    # Interactive email/password login
+    email = click.prompt("Email")
+    password = click.prompt("Password", hide_input=True)
+    _run(_login_impl(email, password))
+
+
+async def _login_impl(email: str, password: str):
+    async with httpx.AsyncClient(base_url=_api_url(), timeout=15.0) as c:
+        r = await c.post("/api/v1/auth/login", json={
+            "email": email,
+            "password": password,
+        })
+
+        if r.status_code == 401:
+            click.secho("Invalid email or password.", fg="red")
+            sys.exit(1)
+        r.raise_for_status()
+
+        tokens = r.json()
+        _save_credentials({
+            "access_token": tokens["access_token"],
+            "refresh_token": tokens["refresh_token"],
+        })
+        click.secho("Logged in successfully.", fg="green")
+
+
+@main.command()
+def logout():
+    """Clear stored credentials."""
+    try:
+        os.unlink(CREDENTIALS_PATH)
+        click.secho("Logged out.", fg="green")
+    except FileNotFoundError:
+        click.echo("No credentials found.")
 
 
 # ---------------------------------------------------------------------------
