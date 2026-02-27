@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <strong>Your AI development entourage.</strong>
+  <strong>One agent writes code. An entourage ships it.</strong>
   <br />
-  Orchestrate AI developer agents with tasks, git, reviews, approvals, and cost tracking.
-  <br />
-  Agents connect via <a href="https://modelcontextprotocol.io">MCP</a>. Humans get a real-time dashboard. Every action is event-sourced.
+  The orchestration layer that turns solo AI agents into governed, coordinated engineering teams.
+  <br /><br />
+  <a href="https://modelcontextprotocol.io">MCP-native</a> · Event-sourced · Human-in-the-loop
 </p>
 
 <p align="center">
@@ -20,6 +20,25 @@
 </p>
 
 ---
+
+## Why not just use Claude?
+
+You absolutely should. Entourage doesn't replace your agent — it gives it a production-grade backbone.
+
+| Solo agent | With Entourage |
+|:-----------|:---------------|
+| One agent, one chat thread | Multiple agents coordinated across tasks |
+| Context window is the only memory | Persistent tasks, events, sessions — survive restarts |
+| No spending limits — hope for the best | Per-session and daily budget caps, cost tracking per task |
+| Freeform execution — anything goes | State machine enforces valid transitions (can't merge without review) |
+| You manually review everything | Structured review cycles with file-anchored comments and verdicts |
+| Agent works silently until done | Agent pauses to ask you questions, waits for approval |
+| Code goes straight to a branch | Isolated git worktrees per task — agents can't stomp each other |
+| Chat history is the audit trail | Every action is an immutable event (who did what, when, why) |
+| You trigger work manually | GitHub webhooks auto-create tasks from issues and PRs |
+| One project, one person | Multi-tenant: orgs → teams → agents, API key scoping |
+
+**In short:** Claude is the developer. Entourage is the engineering org that developer works inside — with task boards, code review, access controls, cost tracking, and human oversight.
 
 ## How it works
 
@@ -36,46 +55,52 @@
               (all state)  (pub/sub)  (worktrees)
 ```
 
-You define the work. Your entourage executes it. Agents get tasks, write code in isolated git worktrees, request reviews, wait for approvals, and merge — all through 44 MCP tools. Humans stay in the loop via a real-time dashboard.
+1. You define tasks. Entourage assigns them to agents.
+2. Agents write code in isolated git worktrees via MCP tools.
+3. When stuck, agents **ask humans** — and wait for a response.
+4. Finished work goes through **code review** with approve/reject/request-changes.
+5. Approved tasks merge via a managed queue. Every step is event-sourced.
 
-## Features
+Humans stay in control. Agents stay productive. Nothing ships without oversight.
+
+## What you get
 
 <table>
 <tr>
 <td width="50%">
 
-**Task orchestration**
-- State machine with 7 states and validated transitions
-- DAG dependencies — Task B waits for Task A
-- Event sourcing — full audit trail for everything
+**Governed task workflow**
+- 7-state machine with enforced transitions
+- DAG dependencies — Task B blocks until Task A completes
+- Full event-sourced audit trail for every action
 
-**Git integration**
-- Branch-per-task with git worktrees
-- Diffs, file browsing, commit history
+**Safe git operations**
+- Branch-per-task with isolated worktrees
+- Agents can't interfere with each other's code
 - Merge queue with rebase/squash strategies
 
-**Agent management**
-- Session tracking with token/cost accounting
-- Budget enforcement (daily + per-task limits)
-- Multi-agent dispatch via PG LISTEN/NOTIFY
+**Cost controls**
+- Per-session token and dollar tracking
+- Daily and per-task budget caps
+- Kill a runaway agent before it burns your API credits
 
 </td>
 <td width="50%">
 
-**Human-in-the-loop**
-- Agents ask questions, request approvals
-- Review cycles with file-anchored comments
-- Approve/reject/request changes verdicts
+**Human oversight**
+- Agents pause and ask before risky decisions
+- File-anchored review comments (not just "LGTM")
+- Approve / reject / request-changes verdicts
 
-**Auth & multi-tenant**
-- JWT access/refresh tokens for humans
-- API keys (SHA-256 hashed) for agents
-- Organizations → Teams → Agents hierarchy
+**Multi-agent coordination**
+- PG LISTEN/NOTIFY instant dispatch
+- Message routing between agents
+- Concurrent agent execution with semaphore limits
 
-**Integrations**
-- GitHub webhooks with HMAC-SHA256 verification
-- Configurable team settings (budgets, models, workflows)
-- Real-time WebSocket + Redis pub/sub
+**Production-ready integrations**
+- GitHub webhooks → auto-create tasks from issues/PRs
+- JWT + API key auth with org-scoped access
+- Real-time dashboard via WebSocket + Redis pub/sub
 
 </td>
 </tr>
