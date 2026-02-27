@@ -27,33 +27,51 @@ jobs:
         ports: ["6379:6379"]
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Cache uv dependencies
+        uses: actions/cache@v4
+        with:
+          path: packages/backend/.venv
+          key: uv-${{ runner.os }}-${{ hashFiles('packages/backend/uv.lock') }}
+          restore-keys: uv-${{ runner.os }}-
+
       - name: Install dependencies
         run: |
           cd packages/backend
-          pip install -e ".[dev]"
+          uv sync --frozen
+
       - name: Run tests
         env:
           OPENCLAW_DATABASE_URL: postgresql+asyncpg://openclaw:test@localhost:5432/openclaw_test
           OPENCLAW_REDIS_URL: redis://localhost:6379/0
         run: |
           cd packages/backend
-          pytest tests/ -x -q
+          uv run pytest tests/ -x -q
 
   mcp-server:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/mcp-server/package-lock.json
+
       - name: Install and build
         run: |
           cd packages/mcp-server
-          npm install
+          npm ci
           npm run build
+
       - name: Run tests
         run: |
           cd packages/mcp-server
@@ -63,11 +81,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: packages/frontend/package-lock.json
+
       - name: Install and build
         run: |
           cd packages/frontend
-          npm install
+          npm ci
           npm run build
