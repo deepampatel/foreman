@@ -104,7 +104,10 @@ export function useTeamSocket(teamId: string | undefined) {
     function connect() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.host;
-      const ws = new WebSocket(`${protocol}//${host}/ws/${teamId}`);
+      // Include auth token if available (required in production)
+      const token = localStorage.getItem("openclaw_token") || "";
+      const tokenParam = token ? `?token=${token}` : "";
+      const ws = new WebSocket(`${protocol}//${host}/ws/${teamId}${tokenParam}`);
 
       ws.onopen = () => {
         reconnectDelayRef.current = 1000; // Reset backoff on successful connect

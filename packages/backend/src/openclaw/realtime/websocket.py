@@ -1,9 +1,10 @@
 """WebSocket endpoint — real-time event delivery to frontend clients.
 
-Learn: Each client connects to /ws/{team_id}. The handler:
-1. Subscribes to the team's Redis pub/sub channel
-2. Forwards every Redis message to the WebSocket client
-3. Handles client disconnection gracefully
+Learn: Each client connects to /ws/{team_id}?token=JWT. The handler:
+1. Authenticates via JWT query param (required in production)
+2. Subscribes to the team's Redis pub/sub channel
+3. Forwards every Redis message to the WebSocket client
+4. Handles client disconnection gracefully
 
 This is a long-lived connection — one per team per browser tab.
 """
@@ -12,11 +13,14 @@ import asyncio
 import json
 
 import redis.asyncio as aioredis
+import structlog
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from openclaw.config import settings
 from openclaw.realtime.pubsub import get_redis
 
+logger = structlog.get_logger()
 router = APIRouter()
 
 
@@ -29,7 +33,27 @@ async def team_websocket(websocket: WebSocket, team_id: str):
     2. Client listener — reads from WebSocket (for future bidirectional use)
 
     When either side disconnects, both tasks are cancelled cleanly.
+
+    Authentication: JWT token required as ?token= query param.
+    In development mode, unauthenticated connections are allowed.
     """
+    # ── Authentication ──────────────────────────────────────
+    token = websocket.query_params.get("token")
+
+    if not token and settings.environment != "development":
+        await websocket.close(code=4001, reason="Authentication required")
+        return
+
+    if token:
+        from openclaw.auth.jwt import TokenError, verify_token
+
+        try:
+            verify_token(token)
+        except TokenError:
+            await websocket.close(code=4001, reason="Invalid or expired token")
+            return
+
+    # ── Connection accepted ─────────────────────────────────
     await websocket.accept()
 
     r = get_redis()

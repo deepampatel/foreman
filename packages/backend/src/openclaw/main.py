@@ -81,13 +81,24 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS — allow frontend dev server
+    # ── Middleware stack ──────────────────────────────────────
+    # Note: Starlette middleware executes in reverse order of registration.
+    # Request flow: RequestId → Security → RateLimit → CORS → handler
+
+    from openclaw.middleware.rate_limit import RateLimitMiddleware
+    from openclaw.middleware.request_id import RequestIdMiddleware
+    from openclaw.middleware.security import SecurityHeadersMiddleware
+
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(SecurityHeadersMiddleware)
+    app.add_middleware(
+        RateLimitMiddleware,
+        default_rpm=settings.rate_limit_rpm,
+        auth_rpm=settings.rate_limit_auth_rpm,
+    )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:5173",  # Vite dev server
-            "http://localhost:3000",  # Alternative frontend port
-        ],
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

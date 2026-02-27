@@ -28,7 +28,7 @@ from openclaw.auth.jwt import (
     create_refresh_token,
     verify_token,
 )
-from openclaw.auth.password import hash_password, verify_password
+from openclaw.auth.password import hash_password, needs_upgrade, verify_password
 from openclaw.db.engine import get_db
 from openclaw.db.models import ApiKey, User
 
@@ -137,6 +137,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     if not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+
+    # Auto-upgrade legacy SHA-256 hashes to bcrypt on successful login
+    if needs_upgrade(user.password_hash):
+        user.password_hash = hash_password(body.password)
+        await db.commit()
 
     access_token = create_access_token(str(user.id))
     refresh_token = create_refresh_token(str(user.id))

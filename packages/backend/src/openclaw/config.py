@@ -7,6 +7,7 @@ Learn: pydantic-settings auto-loads from environment, validates types,
 provides defaults. Much cleaner than Delegate's YAML config.py.
 """
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -36,6 +37,16 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
 
+    # CORS
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ]
+
+    # Rate limiting
+    rate_limit_rpm: int = 100  # requests per minute per IP
+    rate_limit_auth_rpm: int = 10  # stricter limit for auth endpoints
+
     # Agent defaults
     default_agent_model: str = "claude-sonnet-4-20250514"
     max_concurrent_agents: int = 32
@@ -46,6 +57,20 @@ class Settings(BaseSettings):
     agent_timeout_seconds: int = 1800  # 30 min default
 
     model_config = {"env_prefix": "OPENCLAW_"}
+
+    @model_validator(mode="after")
+    def validate_production_settings(self):
+        """Ensure sensitive defaults are changed in non-development environments."""
+        if (
+            self.environment != "development"
+            and self.jwt_secret == "change-me-in-production"
+        ):
+            raise ValueError(
+                "OPENCLAW_JWT_SECRET must be set to a secure value in "
+                "non-development environments. Generate one with: "
+                'python -c "import secrets; print(secrets.token_urlsafe(32))"'
+            )
+        return self
 
 
 # Singleton — import this everywhere
