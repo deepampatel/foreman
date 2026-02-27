@@ -29,10 +29,10 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     "Content-Type": "application/json",
   };
 
-  // Future: add API key auth header
-  // if (process.env.OPENCLAW_API_KEY) {
-  //   headers["Authorization"] = `Bearer ${process.env.OPENCLAW_API_KEY}`;
-  // }
+  // API key auth — pass via X-API-Key header if configured
+  if (process.env.OPENCLAW_API_KEY) {
+    headers["X-API-Key"] = process.env.OPENCLAW_API_KEY;
+  }
 
   const resp = await fetch(url.toString(), {
     method: opts.method || "GET",

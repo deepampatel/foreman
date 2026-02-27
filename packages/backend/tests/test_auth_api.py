@@ -175,20 +175,25 @@ async def test_refresh_with_access_token_fails(client):
 
 
 @pytest.mark.asyncio
-async def test_me_with_token(client):
-    """Access /me with valid JWT token."""
+async def test_me_with_token(unauthenticated_client):
+    """Access /me with valid JWT token.
+
+    Learn: Uses unauthenticated_client so the real JWT auth pipeline runs
+    (no get_current_user mock override). This tests the full flow:
+    register → login → use JWT → /me returns user info.
+    """
     email = f"me-{uuid.uuid4().hex[:8]}@example.com"
-    await client.post(
+    await unauthenticated_client.post(
         "/api/v1/auth/register",
         json={"email": email, "name": "Me User", "password": "password_123"},
     )
-    r = await client.post(
+    r = await unauthenticated_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": "password_123"},
     )
     token = r.json()["access_token"]
 
-    r = await client.get(
+    r = await unauthenticated_client.get(
         "/api/v1/auth/me",
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -198,16 +203,16 @@ async def test_me_with_token(client):
 
 
 @pytest.mark.asyncio
-async def test_me_without_token(client):
+async def test_me_without_token(unauthenticated_client):
     """Access /me without token returns 401."""
-    r = await client.get("/api/v1/auth/me")
+    r = await unauthenticated_client.get("/api/v1/auth/me")
     assert r.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_me_with_invalid_token(client):
+async def test_me_with_invalid_token(unauthenticated_client):
     """Access /me with invalid token returns 401."""
-    r = await client.get(
+    r = await unauthenticated_client.get(
         "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalid_token_here"},
     )
@@ -286,19 +291,43 @@ async def test_revoke_api_key(client):
 
 
 @pytest.mark.asyncio
-async def test_api_key_auth(client):
-    """Authenticate with API key via x-api-key header."""
+async def test_api_key_auth(unauthenticated_client):
+    """Authenticate with API key via x-api-key header.
+
+    Learn: Uses unauthenticated_client so the real auth pipeline runs.
+    First registers+logs in a user to get a JWT (needed for protected
+    org creation). Then creates an API key and verifies /me works with it.
+    """
+    # Bootstrap: register + login to get JWT for org creation
+    email = f"apiauth-{uuid.uuid4().hex[:8]}@example.com"
+    await unauthenticated_client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "name": "Key User", "password": "password_123"},
+    )
+    r = await unauthenticated_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "password_123"},
+    )
+    token = r.json()["access_token"]
+    auth_headers = {"Authorization": f"Bearer {token}"}
+
+    # Create org (protected route — needs JWT)
     slug = f"auth-{uuid.uuid4().hex[:8]}"
-    r = await client.post("/api/v1/orgs", json={"name": "Auth Org", "slug": slug})
+    r = await unauthenticated_client.post(
+        "/api/v1/orgs", json={"name": "Auth Org", "slug": slug},
+        headers=auth_headers,
+    )
     org_id = r.json()["id"]
 
-    r = await client.post(
+    # Create API key (auth router — open)
+    r = await unauthenticated_client.post(
         f"/api/v1/auth/orgs/{org_id}/api-keys",
         json={"name": "Auth Key"},
     )
     api_key = r.json()["key"]
 
-    r = await client.get(
+    # Test: /me with API key
+    r = await unauthenticated_client.get(
         "/api/v1/auth/me",
         headers={"x-api-key": api_key},
     )
@@ -308,9 +337,9 @@ async def test_api_key_auth(client):
 
 
 @pytest.mark.asyncio
-async def test_api_key_invalid(client):
+async def test_api_key_invalid(unauthenticated_client):
     """Invalid API key returns 401."""
-    r = await client.get(
+    r = await unauthenticated_client.get(
         "/api/v1/auth/me",
         headers={"x-api-key": "oc_invalid_key_12345"},
     )

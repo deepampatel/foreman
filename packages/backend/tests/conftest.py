@@ -49,8 +49,44 @@ async def db_session():
 
 @pytest_asyncio.fixture()
 async def client(db_session):
-    """HTTP client with the app's get_db overridden to use our test session."""
+    """HTTP client with the app's get_db and auth overridden for testing.
 
+    Learn: We override get_current_user to return a mock identity so all
+    protected routes work without real JWT tokens. This means tests don't
+    need to register+login before each test case.
+    """
+    from openclaw.auth.dependencies import CurrentIdentity, get_current_user
+
+    async def override_get_db():
+        yield db_session
+
+    def override_get_current_user():
+        return CurrentIdentity(
+            user_id="00000000-0000-0000-0000-000000000001",
+            org_id="00000000-0000-0000-0000-000000000002",
+            scopes=["all"],
+            identity_type="user",
+        )
+
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture()
+async def unauthenticated_client(db_session):
+    """HTTP client WITHOUT auth override — for testing real JWT/API-key flows.
+
+    Learn: The regular `client` fixture overrides get_current_user so that
+    all protected routes pass. But auth tests (e.g. test_me_with_token)
+    need the real auth pipeline to validate real tokens. This fixture
+    only overrides get_db (for DB isolation) and leaves auth untouched.
+    """
     async def override_get_db():
         yield db_session
 
