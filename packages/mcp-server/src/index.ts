@@ -814,7 +814,7 @@ server.tool(
 
 server.tool(
   "ask_human",
-  "Ask a human for input — question, approval, or review. Creates a persistent request that appears in the dashboard.",
+  "Ask a human for input — question, approval, or review. Creates a persistent request that appears in the dashboard. Use wait=true to block until the human responds.",
   {
     team_id: z.string().describe("Team UUID"),
     agent_id: z.string().describe("Agent UUID making the request"),
@@ -823,6 +823,7 @@ server.tool(
     task_id: z.number().describe("Related task ID").optional(),
     options: z.array(z.string()).describe("Pre-defined answer options (e.g. ['approve', 'reject'])").default([]),
     timeout_minutes: z.number().describe("Auto-expire after N minutes").optional(),
+    wait: z.boolean().describe("If true, block until the human responds (polls every 5s). Use this when running as a subprocess via an adapter.").default(false),
   },
   async (params) => {
     try {
@@ -837,6 +838,16 @@ server.tool(
           timeout_minutes: params.timeout_minutes,
         }
       );
+
+      // If wait=true, poll until the human responds
+      if (params.wait) {
+        const resolved = await client.pollForResponse(hr.id);
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(resolved, null, 2) }],
+        };
+      }
+
+      // Non-blocking: return immediately with pending status
       return {
         content: [{ type: "text" as const, text: JSON.stringify(hr, null, 2) }],
       };

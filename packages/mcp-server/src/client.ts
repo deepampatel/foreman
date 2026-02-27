@@ -545,6 +545,33 @@ export async function getHumanRequest(
   return request(`/api/v1/human-requests/${requestId}`);
 }
 
+/**
+ * Poll for a human request response — blocks until resolved or timed out.
+ *
+ * Learn: When a coding agent (Claude Code, Codex) calls ask_human(wait=true),
+ * the MCP tool needs to block until the human responds. Since we're in an MCP
+ * stdio process with no PG LISTEN access, we poll the HTTP API.
+ *
+ * Default: poll every 5 seconds, timeout after 1 hour.
+ */
+export async function pollForResponse(
+  requestId: number,
+  pollIntervalMs: number = 5000,
+  timeoutMs: number = 3600000
+): Promise<HumanRequestInfo> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const hr = await getHumanRequest(requestId);
+    if (hr.status !== "pending") {
+      return hr;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error(
+    `Timed out waiting for human response to request ${requestId} after ${Math.round(timeoutMs / 1000)}s`
+  );
+}
+
 export async function listHumanRequests(
   teamId: string,
   opts: { status?: string; agent_id?: string; task_id?: number } = {}
