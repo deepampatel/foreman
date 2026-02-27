@@ -256,11 +256,17 @@ class TaskDispatcher:
                     len(self.stats.in_flight),
                 )
 
-                # NOTE: In production, this is where we'd actually run the
-                # agent turn via AgentRunner. For now, we just mark them
-                # as working and let external systems (OpenClaw agents via
-                # MCP) handle the actual work. The agent calls end_session
-                # when done, which resets status to idle.
+                # Run the agent via adapter (Claude Code, Codex, etc.)
+                # This is non-blocking — the run happens in a background task.
+                # The adapter spawns a subprocess and manages its lifecycle.
+                from openclaw.agent.runner import AgentRunner
+
+                runner = AgentRunner()
+                asyncio.create_task(
+                    self._run_agent_background(
+                        runner, agent_id, team_id, reason
+                    )
+                )
 
             except Exception:
                 logger.exception("Error dispatching agent %s", agent_id)
@@ -276,6 +282,58 @@ class TaskDispatcher:
                     pass
             finally:
                 self.stats.in_flight.discard(agent_id)
+
+    # ─── Agent run background task ────────────────────────
+
+    async def _run_agent_background(
+        self, runner, agent_id: str, team_id: str, reason: str
+    ):
+        """Run an agent turn in the background via adapter.
+
+        Learn: This is fire-and-forget from the dispatch perspective.
+        The runner handles session lifecycle, error recording, and
+        resetting the agent to idle when done.
+        """
+        try:
+            task_id = await self._get_agent_current_task(agent_id)
+
+            result = await runner.run_agent(
+                agent_id=agent_id,
+                team_id=team_id,
+                task_id=task_id,
+            )
+
+            logger.info(
+                "Agent %s run completed (reason=%s, duration=%.1fs, exit=%d)",
+                agent_id,
+                reason,
+                result.get("duration_seconds", 0),
+                result.get("exit_code", -1),
+            )
+        except Exception:
+            logger.exception(
+                "Agent %s run failed (reason=%s)", agent_id, reason
+            )
+            # Reset agent to idle on unexpected failure
+            try:
+                async with self._db_pool.acquire() as conn:
+                    await conn.execute(
+                        "UPDATE agents SET status = 'idle' WHERE id = $1",
+                        UUID(agent_id),
+                    )
+            except Exception:
+                pass
+
+    async def _get_agent_current_task(self, agent_id: str) -> Optional[int]:
+        """Find the agent's current in_progress task."""
+        async with self._db_pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """SELECT id FROM tasks
+                   WHERE assignee_id = $1 AND status = 'in_progress'
+                   ORDER BY updated_at DESC LIMIT 1""",
+                UUID(agent_id),
+            )
+            return row["id"] if row else None
 
     # ─── Fallback polling ─────────────────────────────────
 
