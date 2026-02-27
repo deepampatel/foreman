@@ -160,6 +160,94 @@ curl -X PATCH http://localhost:8000/api/v1/settings/teams/{team_id} \
   -d '{"daily_cost_limit_usd": 5.00}'
 ```
 
+## Multi-agent orchestration
+
+When you have a larger feature that involves multiple agents, the manager agent can coordinate the work using Entourage's orchestration tools. Instead of creating and assigning tasks one at a time, the manager creates batches, delegates, and waits for results.
+
+### Check team capacity
+
+Before assigning work, the manager checks who's available:
+
+```bash
+# Via MCP tool: list_team_agents
+# Returns all agents on the team with their current status and active task count
+curl http://localhost:8000/api/v1/teams/{team_id}/agents
+```
+
+This tells the manager which engineers are idle and ready for new work.
+
+### Create tasks in batch
+
+Instead of creating tasks one by one, use `create_tasks_batch` to create multiple tasks in a single call:
+
+```bash
+# Via MCP tool: create_tasks_batch
+curl -X POST http://localhost:8000/api/v1/teams/{team_id}/tasks/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tasks": [
+      {
+        "title": "Add rate limiting middleware",
+        "description": "Apply 100 rpm default limit to all API routes, 10 rpm for auth endpoints",
+        "priority": "high",
+        "task_type": "feature",
+        "assignee_id": "{eng-backend_id}"
+      },
+      {
+        "title": "Add rate limit headers to frontend API client",
+        "description": "Parse X-RateLimit-Remaining headers and show warnings",
+        "priority": "medium",
+        "task_type": "feature",
+        "assignee_id": "{eng-frontend_id}"
+      },
+      {
+        "title": "Write rate limiting integration tests",
+        "description": "Test 429 responses, header presence, and per-route limits",
+        "priority": "medium",
+        "task_type": "feature",
+        "assignee_id": "{eng-backend_id}",
+        "depends_on": ["{task_1_id}"]
+      }
+    ]
+  }'
+```
+
+All three tasks are created atomically. Dependencies are wired up. Agents are assigned and notified.
+
+### Wait for completion
+
+The manager doesn't need to poll. It calls `wait_for_task_completion` which blocks until all specified tasks reach a terminal state:
+
+```bash
+# Via MCP tool: wait_for_task_completion
+curl -X POST http://localhost:8000/api/v1/tasks/wait \
+  -H "Content-Type: application/json" \
+  -d '{
+    "task_ids": ["{task_1_id}", "{task_2_id}", "{task_3_id}"],
+    "timeout_seconds": 3600
+  }'
+```
+
+When all tasks complete (or the timeout is reached), the manager gets the results and can consolidate — writing a summary, creating a follow-up task, or marking the parent feature as done.
+
+### The full orchestration loop
+
+```
+Manager receives feature request
+    ↓
+list_team_agents → check who's available
+    ↓
+create_tasks_batch → create sub-tasks + assign to engineers
+    ↓
+Engineers work in parallel (isolated worktrees)
+    ↓
+wait_for_task_completion → manager blocks until all sub-tasks finish
+    ↓
+Manager consolidates results → marks feature complete
+```
+
+This pattern replaces manual coordination. The manager agent handles decomposition, delegation, and follow-up automatically.
+
 ## The key patterns
 
 ### 1. Tasks, not chat threads

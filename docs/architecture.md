@@ -8,7 +8,7 @@
 │                                                                  │
 │   ┌──────────┐    MCP (stdio)    ┌──────────────────────────┐   │
 │   │ AI Agent │◄─────────────────►│     MCP Server (TS)      │   │
-│   │ (Claude, │    44 tools       │  tasks, git, reviews,    │   │
+│   │ (Claude, │    47 tools       │  tasks, git, reviews,    │   │
 │   │  etc.)   │                   │  sessions, webhooks, ... │   │
 │   └──────────┘                   └────────────┬─────────────┘   │
 │                                               │ REST             │
@@ -82,7 +82,7 @@ GitHub POST → /webhooks/{id}/receive → Verify HMAC-SHA256 signature
 ## Layer Separation
 
 ```
-MCP Tool Definition (index.ts)      What agents see (44 tools)
+MCP Tool Definition (index.ts)      What agents see (47 tools)
         │
         ▼
 HTTP Client (client.ts)              Protocol bridge (MCP → HTTP)
@@ -167,3 +167,36 @@ GitHub/GitLab webhook ingestion:
 - Event filtering (configurable per webhook)
 - Delivery audit trail (every payload logged)
 - Extensible event processing
+
+### Agent Adapter System (Phase 11)
+Pluggable adapters that launch and manage external AI coding agents. Each adapter subclasses `AgentAdapter` and implements `run()` (start the agent process) and `build_prompt()` (format the task into agent-specific instructions).
+
+Three built-in adapters in `packages/backend/src/openclaw/agent/adapters/`:
+
+| Adapter | Agent | How it works |
+|---------|-------|-------------|
+| `claude_code.py` | Claude Code | Spawns `claude` CLI with `--print` mode, streams output |
+| `codex.py` | OpenAI Codex | Spawns `codex` CLI, captures stdout |
+| `aider.py` | Aider | Spawns `aider` with `--message` flag, reads result |
+
+All adapters run the agent process in a task worktree so changes are branch-isolated. The adapter system is used by the CLI `run` command and the dispatcher when auto-assigning work.
+
+### Merge Worker (Phase 12)
+Background task that polls the `merge_jobs` table for jobs with status `queued`. For each job:
+
+1. Sets status to `running`
+2. Checks out the task branch in the repo
+3. Executes the merge strategy (`rebase`, `merge`, or `squash`)
+4. On success: sets status to `success`, records the merge commit SHA, transitions the task to `done`
+5. On failure: sets status to `failed`, records the error, transitions the task back to `in_progress`
+
+The worker runs as part of the backend process and is started during application lifespan.
+
+### Security Middleware (Phase 16)
+Production-grade security hardening applied to all API routes:
+
+- **Rate limiting** — Configurable per-endpoint rate limits to prevent abuse
+- **Security headers** — Strict `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, and other headers via middleware
+- **Request ID** — Every request gets a unique `X-Request-ID` header for tracing through logs
+- **WebSocket auth** — WebSocket connections require a valid JWT token on the upgrade handshake
+- **bcrypt** — Password hashing upgraded from SHA-256+salt to bcrypt for user accounts

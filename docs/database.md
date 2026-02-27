@@ -417,3 +417,7 @@ Audit trail for incoming webhook payloads.
 | `b9273a98ca4c` | Phase 9: api_keys table |
 | `8fd38d37a5f3` | Phase 10: webhooks and webhook_deliveries |
 | `d29768ed705e` | Phase 10: add config column to teams |
+
+## Schema Coverage
+
+The database schema documented above covers all features through Phase 17. Phases 11-17 (agent adapters, CLI, merge worker, auth hardening, orchestration tools, batch task creation, multi-agent orchestration, E2E tests, DevOps, and frontend enhancements) did not introduce new database tables. These features operate on the existing schema — the agent adapter system uses the `agents` and `sessions` tables, batch task creation writes to the existing `tasks` table, and the merge worker reads from `merge_jobs` which was added in Phase 8.

@@ -210,3 +210,59 @@ Query the full history: `GET /api/v1/tasks/1/events`
 | `medium` | Default. Standard work items |
 | `high` | Important, should be done soon |
 | `critical` | Blocking other work, do immediately |
+
+## Batch Task Creation
+
+The `POST /api/v1/teams/{team_id}/tasks/batch` endpoint (and the `create_tasks_batch` MCP tool) creates multiple tasks in a single request with support for intra-batch dependencies.
+
+### Request Format
+
+```json
+{
+  "tasks": [
+    {"title": "Set up database models", "assignee_id": "agent-uuid-1"},
+    {"title": "Build API endpoints", "assignee_id": "agent-uuid-2", "depends_on_indices": [0]},
+    {"title": "Write integration tests", "depends_on_indices": [0, 1]}
+  ]
+}
+```
+
+### How `depends_on_indices` Works
+
+- Each task in the array can reference other tasks **in the same batch** by their 0-based array index
+- After all tasks are created and assigned real IDs, the indices are resolved to actual `depends_on` task IDs
+- Task at index 1 with `depends_on_indices: [0]` means it depends on the task at index 0 in the batch
+- Standard DAG dependency enforcement applies — the dependent task cannot move to `in_progress` until its dependencies reach `done`
+
+This is the primary mechanism for a manager agent to plan and dispatch a multi-step project in one call.
+
+## Multi-Agent Orchestration
+
+The `wait_for_task_completion` MCP tool enables blocking coordination between agents. A manager agent can assign work to engineer agents and then block until the work is done before proceeding with the next step.
+
+### Blocking Pattern
+
+```
+Manager creates batch of tasks with dependencies
+  → Assigns task A to engineer-1
+  → Assigns task B to engineer-2
+  → Calls wait_for_task_completion(task_id=A)
+  → Blocked until engineer-1 finishes (task A reaches "done" or "cancelled")
+  → Calls wait_for_task_completion(task_id=B)
+  → Blocked until engineer-2 finishes
+  → Manager continues with follow-up work
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `task_id` | _(required)_ | The task to wait on |
+| `timeout_seconds` | 3600 | Max wait time before the call errors |
+| `terminal_statuses` | `["done", "cancelled"]` | Which statuses count as "complete" |
+
+The tool polls the task status internally and returns the full task object once a terminal status is reached. If the timeout expires, it returns an error so the manager can decide how to proceed (retry, escalate, cancel).
+
+### Discovering Agents
+
+Use `list_team_agents` to discover available agents and their current status (`idle`, `working`, `paused`) before assigning work. This lets a manager agent make informed assignment decisions based on agent availability.

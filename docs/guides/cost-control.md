@@ -25,10 +25,10 @@ With Entourage:
 Every block of agent work is a **session**. When an agent starts working on a task, it opens a session:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/sessions/start \
+curl -X POST http://localhost:8000/api/v1/agents/{agent_id}/sessions \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: oc_your_key_here" \
   -d '{
-    "agent_id": "{agent_id}",
     "task_id": 594,
     "model": "claude-sonnet-4-20250514"
   }'
@@ -39,6 +39,7 @@ As the agent works, it reports token usage:
 ```bash
 curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/usage \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: oc_your_key_here" \
   -d '{
     "input_tokens": 2500,
     "output_tokens": 800,
@@ -49,8 +50,11 @@ curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/usage \
 When done, the session closes:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/end
+curl -X POST http://localhost:8000/api/v1/sessions/{session_id}/end \
+  -H "X-API-Key: oc_your_key_here"
 ```
+
+All session endpoints require authentication (API key or JWT bearer token). See the [Getting Started](getting-started.md) guide for setting up authentication.
 
 ### Budget checks
 
@@ -184,3 +188,44 @@ curl -X PATCH http://localhost:8000/api/v1/settings/teams/{team_id} \
   -H "Content-Type: application/json" \
   -d '{"daily_cost_limit_usd": 5.00}'
 ```
+
+## Rate limiting
+
+Entourage applies rate limiting to all API routes to prevent abuse and control resource usage.
+
+### Default limits
+
+| Route category | Default limit |
+|---------------|---------------|
+| General API routes | 100 requests per minute |
+| Auth endpoints (`/auth/*`) | 10 requests per minute |
+
+When a client exceeds the limit, the API returns `429 Too Many Requests` with a `Retry-After` header.
+
+### Response headers
+
+Every API response includes rate limit headers:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 87
+X-RateLimit-Reset: 1709042460
+```
+
+### Configuration
+
+The default rate limit is configurable via environment variable:
+
+```bash
+# In your .env file
+OPENCLAW_RATE_LIMIT_RPM=100    # requests per minute for general routes
+```
+
+Auth endpoints are always limited to 10 rpm regardless of this setting, to protect against brute-force attacks.
+
+### Rate limiting for agents
+
+When running multiple agents, keep in mind that each agent's MCP tool calls go through the API. A team of 3 agents each making rapid tool calls can hit the 100 rpm limit. If you see `429` errors in agent sessions:
+
+1. Increase the limit: `OPENCLAW_RATE_LIMIT_RPM=300`
+2. Or stagger agent work using DAG dependencies so fewer agents run concurrently

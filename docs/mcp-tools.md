@@ -2,7 +2,7 @@
 
 Entourage exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
 
-**Total tools: 44**
+**Total tools: 47**
 
 ## Connection
 
@@ -453,3 +453,44 @@ Update team configuration. Only provided fields are changed (merge behavior).
 | `auto_merge` | boolean | no | Auto-merge after approval |
 | `require_review` | boolean | no | Require review before merge |
 | `branch_prefix` | string | no | Branch naming prefix |
+
+---
+
+## Orchestration (Phase 14)
+
+### `wait_for_task_completion`
+Block until a task reaches a terminal status. Used by manager agents to coordinate multi-agent workflows — assign work, then wait for the engineer to finish before proceeding.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | number | yes | | Task ID to wait on |
+| `timeout_seconds` | number | no | 3600 | Max seconds to wait before timing out |
+| `terminal_statuses` | string[] | no | `["done", "cancelled"]` | Statuses that count as "complete" |
+
+Returns the task object once it reaches a terminal status, or errors on timeout.
+
+### `create_tasks_batch`
+Create multiple tasks in a single call with intra-batch dependency support. Tasks can reference other tasks in the same batch by index via `depends_on_indices`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |
+| `tasks` | array | yes | Array of task objects (see below) |
+
+Each task object in the array:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `title` | string | yes | Task title |
+| `description` | string | no | Task description |
+| `assignee_id` | string | no | Agent UUID to assign |
+| `depends_on_indices` | number[] | no | Indices (0-based) of other tasks in this batch that must complete first |
+
+Indices are resolved to real task IDs after creation. Returns all created tasks.
+
+### `list_team_agents`
+List all agents in a team with their current status. Convenience tool for orchestration — lets a manager agent discover available engineers before assigning work.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |

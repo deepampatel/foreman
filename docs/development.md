@@ -66,7 +66,7 @@ All config is via environment variables with the `OPENCLAW_` prefix.
 
 ```bash
 cd packages/backend
-uv run pytest tests/ -v        # all 147 tests, ~10s
+uv run pytest tests/ -v        # all 156 tests, ~10s
 uv run pytest tests/ -v -k auth   # run only auth tests
 ```
 
@@ -82,7 +82,7 @@ This means:
 - Tests run against the real database (not mocks)
 - Tests are fully isolated — no data leaks between tests
 - No cleanup needed — rollback handles everything
-- Fast — 147 tests in ~10 seconds
+- Fast — 156 tests in ~10 seconds
 
 ### Test Structure
 
@@ -258,11 +258,11 @@ openclaw/
 │   │   │       ├── session.py
 │   │   │       ├── human_request.py
 │   │   │       └── review.py
-│   │   └── tests/                      147 tests across 11 files
+│   │   └── tests/                      156 tests across 11 files
 │   │
 │   ├── mcp-server/                     TypeScript — MCP tools
 │   │   ├── src/
-│   │   │   ├── index.ts                44 tool definitions
+│   │   │   ├── index.ts                47 tool definitions
 │   │   │   └── client.ts               Typed HTTP client
 │   │   ├── tsconfig.json
 │   │   └── package.json
@@ -279,7 +279,7 @@ openclaw/
     ├── architecture.md                 System design, data flow
     ├── database.md                     All tables, relationships
     ├── tasks.md                        State machine, DAG, events
-    ├── mcp-tools.md                    44 tools with parameters
+    ├── mcp-tools.md                    47 tools with parameters
     └── development.md                  (this file)
 ```
 
@@ -340,3 +340,111 @@ async def protected_endpoint(identity: CurrentIdentity = Depends(get_current_use
 ```
 
 Supports both JWT Bearer tokens and `x-api-key` header authentication.
+
+## E2E Testing
+
+End-to-end tests exercise the full stack (backend + real agent adapters) and are gated behind a marker so they don't run in normal CI:
+
+```bash
+cd packages/backend
+uv run pytest tests/ --run-e2e          # run E2E tests (requires running infra)
+uv run pytest tests/ --run-e2e -v -k e2e  # run only E2E tests
+```
+
+E2E tests are decorated with `@pytest.mark.e2e` and are skipped by default unless the `--run-e2e` flag is passed. They require a running PostgreSQL and Redis instance, and may require valid API keys for external services (Anthropic, OpenAI).
+
+```python
+@pytest.mark.e2e
+@pytest.mark.asyncio
+async def test_full_agent_workflow(client):
+    """Requires --run-e2e flag and running infrastructure."""
+    ...
+```
+
+## Adapter Development
+
+To add support for a new AI coding agent, create a new adapter in `packages/backend/src/openclaw/agent/adapters/`.
+
+### Steps
+
+1. Create a new file (e.g., `my_agent.py`)
+2. Subclass `AgentAdapter`
+3. Implement `run()` — launch the agent process, return the result
+4. Implement `build_prompt()` — format the task into agent-specific instructions
+5. Register the adapter in the adapter registry
+
+### Adapter Interface
+
+```python
+from openclaw.agent.adapters.base import AgentAdapter
+
+class MyAgentAdapter(AgentAdapter):
+    name = "my-agent"
+
+    def build_prompt(self, task, repo, worktree_path: str) -> str:
+        """Format the task into agent-specific instructions."""
+        return f"Work on: {task.title}\n\n{task.description}"
+
+    async def run(self, prompt: str, worktree_path: str, model: str) -> str:
+        """Launch the agent process and return its output."""
+        # Spawn subprocess, capture output, return result
+        ...
+```
+
+### Built-in Adapters
+
+| Adapter | File | Agent |
+|---------|------|-------|
+| Claude Code | `claude_code.py` | `claude` CLI with `--print` mode |
+| Codex | `codex.py` | OpenAI `codex` CLI |
+| Aider | `aider.py` | `aider` with `--message` flag |
+
+## Docker Development
+
+### Development
+
+The standard `docker-compose.yml` at the project root starts just PostgreSQL and Redis for local development.
+
+### Production
+
+A production-ready Docker Compose configuration is available:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+This starts the full stack: PostgreSQL, Redis, the FastAPI backend, the MCP server, and the frontend.
+
+### Dockerfiles
+
+- `packages/backend/Dockerfile` — Multi-stage build for the Python backend
+- `packages/mcp-server/Dockerfile` — Node.js build for the MCP server
+- `packages/frontend/Dockerfile` — Vite build + nginx for the frontend
+
+### Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+cp .env.example .env
+# Edit .env with your values (database URL, API keys, JWT secret, etc.)
+```
+
+## Makefile
+
+A `Makefile` at the project root provides shortcuts for common operations:
+
+```bash
+make help           # show all available targets
+make dev            # start development infrastructure (Postgres + Redis)
+make test           # run all tests
+make test-e2e       # run E2E tests
+make build          # build all packages
+make lint           # run linters
+make migrate        # run database migrations
+make docker-up      # start production stack
+make docker-down    # stop production stack
+make clean          # clean build artifacts
+```
+
+Run `make help` to see the full list of available targets and their descriptions.

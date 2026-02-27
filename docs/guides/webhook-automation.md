@@ -22,11 +22,32 @@ Dashboard updates in real-time
 
 Every webhook delivery is logged. You can see what came in, whether it was processed, and what action was taken.
 
+## Authentication
+
+All Entourage API endpoints require authentication, including webhook management. You can authenticate using either method:
+
+### API key
+
+```bash
+curl -X GET http://localhost:8000/api/v1/webhooks \
+  -H "X-API-Key: oc_your_key_here"
+```
+
+### JWT bearer token
+
+```bash
+curl -X GET http://localhost:8000/api/v1/webhooks \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIs..."
+```
+
+Use whichever method fits your setup. API keys are better for server-to-server integrations; JWT tokens are better for user-facing flows.
+
 ## Step 1: Register a webhook
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/webhooks \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: oc_your_key_here" \
   -d '{
     "org_id": "{org_id}",
     "provider": "github",
@@ -76,7 +97,8 @@ Create a GitHub issue. Entourage receives the webhook, verifies the HMAC signatu
 Check deliveries:
 
 ```bash
-curl http://localhost:8000/api/v1/webhooks/{webhook_id}/deliveries
+curl http://localhost:8000/api/v1/webhooks/{webhook_id}/deliveries \
+  -H "X-API-Key: oc_your_key_here"
 ```
 
 ```json
@@ -136,6 +158,58 @@ If they don't match, the request is rejected with 401. This prevents:
 - Replay attacks
 - Tampered payloads
 
+### HMAC signature verification pattern
+
+If you are building a custom integration that sends webhooks to Entourage, here is how to compute the signature:
+
+```python
+import hmac
+import hashlib
+
+def compute_signature(secret: str, payload: bytes) -> str:
+    """Compute HMAC-SHA256 signature for webhook payload."""
+    mac = hmac.new(
+        secret.encode("utf-8"),
+        msg=payload,
+        digestmod=hashlib.sha256,
+    )
+    return f"sha256={mac.hexdigest()}"
+
+# When sending a webhook to Entourage:
+signature = compute_signature("whsec_abc123...", request_body)
+headers = {
+    "X-Hub-Signature-256": signature,
+    "Content-Type": "application/json",
+}
+```
+
+Entourage uses constant-time comparison (`hmac.compare_digest`) to prevent timing attacks.
+
+### Authenticated webhook delivery
+
+When Entourage delivers outbound webhook notifications (e.g., task status changes to an external system), it includes authentication headers so the receiving system can verify the request came from Entourage:
+
+```
+POST https://your-system.com/entourage-webhook
+Content-Type: application/json
+X-API-Key: oc_your_key_here
+X-Entourage-Signature: sha256=a1b2c3d4...
+X-Entourage-Event: task.completed
+X-Entourage-Delivery: delivery-uuid
+
+{
+  "event": "task.completed",
+  "task_id": 601,
+  "team_id": "team-uuid",
+  "timestamp": "2026-02-27T14:30:00Z"
+}
+```
+
+The receiving system should:
+1. Verify the `X-Entourage-Signature` header using the shared secret
+2. Optionally verify the `X-API-Key` matches a known key
+3. Process the event and return `200 OK`
+
 ## Filtering events
 
 You don't have to process everything. The `events` array controls what gets processed:
@@ -144,6 +218,7 @@ You don't have to process everything. The `events` array controls what gets proc
 # Only listen for new issues
 curl -X PATCH http://localhost:8000/api/v1/webhooks/{webhook_id} \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: oc_your_key_here" \
   -d '{"events": ["issues.opened"]}'
 ```
 
@@ -154,13 +229,15 @@ Events not in the list are still logged (for audit) but not processed.
 ### Check webhook status
 
 ```bash
-curl http://localhost:8000/api/v1/webhooks/{webhook_id}
+curl http://localhost:8000/api/v1/webhooks/{webhook_id} \
+  -H "X-API-Key: oc_your_key_here"
 ```
 
 ### List all deliveries
 
 ```bash
-curl http://localhost:8000/api/v1/webhooks/{webhook_id}/deliveries
+curl http://localhost:8000/api/v1/webhooks/{webhook_id}/deliveries \
+  -H "X-API-Key: oc_your_key_here"
 ```
 
 Shows every delivery with status (`received`, `processed`, `failed`), timestamps, and payload summaries.
@@ -170,7 +247,8 @@ Shows every delivery with status (`received`, `processed`, `failed`), timestamps
 If your webhook secret is compromised:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/webhooks/{webhook_id}/regenerate-secret
+curl -X POST http://localhost:8000/api/v1/webhooks/{webhook_id}/regenerate-secret \
+  -H "X-API-Key: oc_your_key_here"
 ```
 
 Update the new secret in GitHub settings.
