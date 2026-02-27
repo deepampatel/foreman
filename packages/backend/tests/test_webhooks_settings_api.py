@@ -378,6 +378,312 @@ async def test_get_org_settings(client):
 
 
 @pytest.mark.asyncio
+async def test_github_issue_creates_task(client):
+    """GitHub issues.opened event auto-creates a task."""
+    # Setup org + team + webhook with team_id
+    r = await client.post("/api/v1/orgs", json={"name": "Issue Org", "slug": f"io-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Issue Team", "slug": f"it-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    r = await client.post(
+        "/api/v1/webhooks",
+        json={
+            "org_id": org_id,
+            "team_id": team_id,
+            "name": "Issue WH",
+            "events": ["issues"],
+        },
+    )
+    wh_id = r.json()["id"]
+    secret = r.json()["secret"]
+
+    # Send issues.opened event
+    payload = json.dumps({
+        "action": "opened",
+        "issue": {
+            "number": 42,
+            "title": "Bug: login broken",
+            "body": "Login page returns 500 after latest deploy",
+            "labels": [{"name": "critical"}, {"name": "auth"}],
+        },
+    }).encode()
+    sig = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    r = await client.post(
+        f"/api/v1/webhooks/{wh_id}/receive",
+        content=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-GitHub-Event": "issues",
+            "X-Hub-Signature-256": sig,
+        },
+    )
+    assert r.status_code == 200
+    result = r.json()
+    assert any("created task" in a for a in result["actions"])
+    assert any("issue #42" in a for a in result["actions"])
+
+    # Verify task was created in the team
+    r = await client.get(f"/api/v1/teams/{team_id}/tasks")
+    tasks = r.json()
+    assert len(tasks) >= 1
+    task = next(t for t in tasks if "[GitHub]" in t["title"])
+    assert "Bug: login broken" in task["title"]
+    assert task["priority"] == "critical"  # mapped from label
+
+
+@pytest.mark.asyncio
+async def test_github_pr_creates_task(client):
+    """GitHub pull_request.opened event auto-creates a task."""
+    r = await client.post("/api/v1/orgs", json={"name": "PR Org", "slug": f"po-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "PR Team", "slug": f"pt-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    r = await client.post(
+        "/api/v1/webhooks",
+        json={
+            "org_id": org_id,
+            "team_id": team_id,
+            "name": "PR WH",
+            "events": ["pull_request"],
+        },
+    )
+    wh_id = r.json()["id"]
+    secret = r.json()["secret"]
+
+    payload = json.dumps({
+        "action": "opened",
+        "pull_request": {
+            "number": 99,
+            "title": "Add rate limiting",
+            "body": "Implements rate limiting using Redis",
+        },
+    }).encode()
+    sig = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    r = await client.post(
+        f"/api/v1/webhooks/{wh_id}/receive",
+        content=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-GitHub-Event": "pull_request",
+            "X-Hub-Signature-256": sig,
+        },
+    )
+    assert r.status_code == 200
+    result = r.json()
+    assert any("created task" in a for a in result["actions"])
+
+    # Verify
+    r = await client.get(f"/api/v1/teams/{team_id}/tasks")
+    tasks = r.json()
+    task = next(t for t in tasks if "[GitHub PR]" in t["title"])
+    assert "Add rate limiting" in task["title"]
+    assert task["priority"] == "medium"
+
+
+@pytest.mark.asyncio
+async def test_github_label_to_priority_mapping(client):
+    """GitHub labels map to correct priorities."""
+    from openclaw.services.webhook_service import WebhookService
+
+    assert WebhookService._map_github_labels_to_priority(["critical"]) == "critical"
+    assert WebhookService._map_github_labels_to_priority(["urgent"]) == "critical"
+    assert WebhookService._map_github_labels_to_priority(["P0"]) == "critical"
+    assert WebhookService._map_github_labels_to_priority(["high"]) == "high"
+    assert WebhookService._map_github_labels_to_priority(["important"]) == "high"
+    assert WebhookService._map_github_labels_to_priority(["P1"]) == "high"
+    assert WebhookService._map_github_labels_to_priority(["low"]) == "low"
+    assert WebhookService._map_github_labels_to_priority(["minor"]) == "low"
+    assert WebhookService._map_github_labels_to_priority(["P3"]) == "low"
+    assert WebhookService._map_github_labels_to_priority(["enhancement"]) == "medium"
+    assert WebhookService._map_github_labels_to_priority([]) == "medium"
+
+
+@pytest.mark.asyncio
+async def test_webhook_auto_assign(client):
+    """Webhook with auto_assign creates task and assigns to idle agent."""
+    r = await client.post("/api/v1/orgs", json={"name": "Auto Org", "slug": f"ao-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Auto Team", "slug": f"at-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    # Create an idle agent
+    r = await client.post(f"/api/v1/teams/{team_id}/agents", json={
+        "name": "auto-eng",
+        "role": "engineer",
+    })
+    agent_id = str(r.json()["id"])
+
+    # Create webhook with auto_assign config
+    r = await client.post(
+        "/api/v1/webhooks",
+        json={
+            "org_id": org_id,
+            "team_id": team_id,
+            "name": "Auto WH",
+            "events": ["issues"],
+            "config": {"auto_assign": True},
+        },
+    )
+    wh_id = r.json()["id"]
+    secret = r.json()["secret"]
+
+    payload = json.dumps({
+        "action": "opened",
+        "issue": {
+            "number": 7,
+            "title": "Fix typo in README",
+            "body": "Small fix",
+            "labels": [],
+        },
+    }).encode()
+    sig = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
+
+    r = await client.post(
+        f"/api/v1/webhooks/{wh_id}/receive",
+        content=payload,
+        headers={
+            "Content-Type": "application/json",
+            "X-GitHub-Event": "issues",
+            "X-Hub-Signature-256": sig,
+        },
+    )
+    assert r.status_code == 200
+    result = r.json()
+    assert any("auto-assigned" in a for a in result["actions"])
+
+    # Verify task is assigned to an agent in the team
+    r = await client.get(f"/api/v1/teams/{team_id}/tasks")
+    tasks = r.json()
+    task = next(t for t in tasks if "[GitHub]" in t["title"])
+    # Team auto-creates a manager agent, so assignee could be either
+    r = await client.get(f"/api/v1/teams/{team_id}/agents")
+    team_agent_ids = {str(a["id"]) for a in r.json()}
+    assert task["assignee_id"] in team_agent_ids
+
+
+# ═══════════════════════════════════════════════════════════
+# Team Conventions
+# ═══════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_create_convention(client):
+    """Create a team convention."""
+    r = await client.post("/api/v1/orgs", json={"name": "Conv Org", "slug": f"co-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Conv Team", "slug": f"ct-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    r = await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={
+            "key": "testing",
+            "content": "Always write unit tests. Use pytest. Target 80% coverage.",
+            "active": True,
+        },
+    )
+    assert r.status_code == 201
+    conv = r.json()
+    assert conv["key"] == "testing"
+    assert "pytest" in conv["content"]
+    assert conv["active"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_conventions(client):
+    """List all team conventions."""
+    r = await client.post("/api/v1/orgs", json={"name": "List Conv Org", "slug": f"lc-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "List Conv Team", "slug": f"lct-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    # Create 2 conventions
+    await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "testing", "content": "Use pytest"},
+    )
+    await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "code_style", "content": "Use ruff for linting"},
+    )
+
+    r = await client.get(f"/api/v1/settings/teams/{team_id}/conventions")
+    assert r.status_code == 200
+    convs = r.json()
+    assert len(convs) == 2
+    assert {c["key"] for c in convs} == {"testing", "code_style"}
+
+
+@pytest.mark.asyncio
+async def test_update_convention(client):
+    """Update a convention by key."""
+    r = await client.post("/api/v1/orgs", json={"name": "Upd Conv Org", "slug": f"uc-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Upd Conv Team", "slug": f"uct-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "architecture", "content": "Use hexagonal architecture"},
+    )
+
+    r = await client.put(
+        f"/api/v1/settings/teams/{team_id}/conventions/architecture",
+        json={"content": "Use clean architecture with DDD", "active": False},
+    )
+    assert r.status_code == 200
+    conv = r.json()
+    assert conv["content"] == "Use clean architecture with DDD"
+    assert conv["active"] is False
+
+
+@pytest.mark.asyncio
+async def test_delete_convention(client):
+    """Delete a convention by key."""
+    r = await client.post("/api/v1/orgs", json={"name": "Del Conv Org", "slug": f"dc-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Del Conv Team", "slug": f"dct-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "to_delete", "content": "Temporary convention"},
+    )
+
+    r = await client.delete(f"/api/v1/settings/teams/{team_id}/conventions/to_delete")
+    assert r.status_code == 200
+    assert r.json()["deleted"] is True
+
+    # Verify it's gone
+    r = await client.get(f"/api/v1/settings/teams/{team_id}/conventions")
+    assert len(r.json()) == 0
+
+
+@pytest.mark.asyncio
+async def test_create_duplicate_convention_fails(client):
+    """Duplicate convention key returns 409."""
+    r = await client.post("/api/v1/orgs", json={"name": "Dup Org", "slug": f"dp-{uuid.uuid4().hex[:8]}"})
+    org_id = str(r.json()["id"])
+    r = await client.post(f"/api/v1/orgs/{org_id}/teams", json={"name": "Dup Team", "slug": f"dpt-{uuid.uuid4().hex[:8]}"})
+    team_id = str(r.json()["id"])
+
+    await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "testing", "content": "Use pytest"},
+    )
+
+    r = await client.post(
+        f"/api/v1/settings/teams/{team_id}/conventions",
+        json={"key": "testing", "content": "Use unittest"},
+    )
+    assert r.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_full_webhook_lifecycle(client):
     """Full lifecycle: create → receive → check deliveries → update → delete."""
     # Setup

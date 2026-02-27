@@ -21,7 +21,7 @@ from typing import Optional
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from openclaw.db.models import Webhook, WebhookDelivery
+from openclaw.db.models import Agent, Webhook, WebhookDelivery
 from openclaw.events.store import EventStore
 from openclaw.events.types import (
     WEBHOOK_CREATED,
@@ -259,6 +259,21 @@ class WebhookService:
         result = await self.db.execute(q)
         return list(result.scalars().all())
 
+    # ─── GitHub label → priority mapping ──────────────────────
+
+    @staticmethod
+    def _map_github_labels_to_priority(labels: list[str]) -> str:
+        """Map GitHub labels to Entourage task priority."""
+        labels_lower = [l.lower() for l in labels]
+        for label in labels_lower:
+            if label in ("critical", "urgent", "p0"):
+                return "critical"
+            if label in ("high", "important", "p1"):
+                return "high"
+            if label in ("low", "minor", "p3"):
+                return "low"
+        return "medium"
+
     async def process_github_event(
         self,
         webhook: Webhook,
@@ -267,11 +282,14 @@ class WebhookService:
     ) -> dict:
         """Process a GitHub webhook event and return summary of actions taken.
 
-        Currently handles:
+        Handles:
         - push: logs the push event
-        - pull_request: logs PR actions
-        - issues: logs issue actions
+        - pull_request.opened: creates a task from the PR
+        - issues.opened: creates a task from the issue
+        - Other events: logged but no task created
         """
+        from openclaw.services.task_service import TaskService
+
         delivery = await self.receive_delivery(
             str(webhook.id), event_type, payload
         )
@@ -290,11 +308,57 @@ class WebhookService:
                 title = pr.get("title", "untitled")
                 actions.append(f"PR {action}: {title}")
 
+                # Auto-create task from opened PRs
+                if action == "opened" and webhook.team_id:
+                    task_svc = TaskService(self.db)
+                    task = await task_svc.create_task(
+                        team_id=webhook.team_id,
+                        title=f"[GitHub PR] {pr.get('title', 'Untitled')}",
+                        description=(
+                            f"GitHub PR #{pr.get('number', '?')}\n\n"
+                            f"{pr.get('body', '') or ''}"
+                        ),
+                        priority="medium",
+                        tags=["github", "pull_request"],
+                    )
+                    actions.append(
+                        f"created task #{task.id} from PR #{pr.get('number')}"
+                    )
+
+                    # Auto-assign to idle agent if configured
+                    await self._try_auto_assign(webhook, task, task_svc, actions)
+
             elif event_type == "issues":
                 action = payload.get("action", "unknown")
                 issue = payload.get("issue", {})
                 title = issue.get("title", "untitled")
                 actions.append(f"issue {action}: {title}")
+
+                # Auto-create task from opened issues
+                if action == "opened" and webhook.team_id:
+                    labels = [
+                        l.get("name", "") for l in issue.get("labels", [])
+                    ]
+                    priority = self._map_github_labels_to_priority(labels)
+
+                    task_svc = TaskService(self.db)
+                    task = await task_svc.create_task(
+                        team_id=webhook.team_id,
+                        title=f"[GitHub] {issue.get('title', 'Untitled')}",
+                        description=(
+                            f"GitHub Issue #{issue.get('number', '?')}\n\n"
+                            f"{issue.get('body', '') or ''}"
+                        ),
+                        priority=priority,
+                        tags=["github", "issue"] + labels[:5],
+                    )
+                    actions.append(
+                        f"created task #{task.id} from issue "
+                        f"#{issue.get('number')}"
+                    )
+
+                    # Auto-assign to idle agent if configured
+                    await self._try_auto_assign(webhook, task, task_svc, actions)
 
             else:
                 actions.append(f"received {event_type} event")
@@ -330,3 +394,24 @@ class WebhookService:
             "actions": actions,
             "status": "processed",
         }
+
+    async def _try_auto_assign(
+        self,
+        webhook: Webhook,
+        task,
+        task_svc,
+        actions: list[str],
+    ) -> None:
+        """Auto-assign task to an idle agent if webhook config allows it."""
+        if not (webhook.config or {}).get("auto_assign"):
+            return
+
+        result = await self.db.execute(
+            select(Agent)
+            .where(Agent.team_id == webhook.team_id, Agent.status == "idle")
+            .limit(1)
+        )
+        agent = result.scalars().first()
+        if agent:
+            await task_svc.assign_task(task.id, agent.id)
+            actions.append(f"auto-assigned to {agent.name}")
