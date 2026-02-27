@@ -3,7 +3,8 @@
 Entourage Human-in-the-Loop Example.
 
 Shows an agent asking a question, waiting for human approval,
-and continuing after receiving a response.
+and continuing after receiving a response. The full interaction
+is tracked in the event trail.
 
 Run with: python examples/human_in_the_loop.py
 
@@ -11,29 +12,18 @@ Requires: pip install httpx
 Backend must be running: http://localhost:8000
 """
 
-import httpx
-import uuid
-
-BASE = "http://localhost:8000/api/v1"
+from _common import setup_workspace
 
 
 def main():
-    run_id = uuid.uuid4().hex[:6]
-    client = httpx.Client(base_url=BASE, timeout=10)
-
     # ── Setup ─────────────────────────────────────────────────────
-    print("Setting up workspace...\n")
-
-    org = client.post("/orgs", json={"name": "HITL Demo", "slug": f"hitl-{run_id}"}).json()
-    team = client.post(f"/orgs/{org['id']}/teams", json={"name": "Core", "slug": "core"}).json()
-
-    agents = client.get(f"/teams/{team['id']}/agents").json()
-    manager = agents[0]
-
-    eng = client.post(f"/teams/{team['id']}/agents", json={
-        "name": "eng-1", "role": "engineer", "model": "claude-sonnet-4-20250514",
-        "config": {"description": "Engineer"}
-    }).json()
+    ws = setup_workspace(
+        "HITL Demo",
+        engineers=[{"name": "eng-1", "description": "Engineer"}],
+    )
+    client = ws["client"]
+    team = ws["team"]
+    eng = ws["engineers"][0]
 
     task = client.post(f"/teams/{team['id']}/tasks", json={
         "title": "Refactor authentication module",
@@ -45,7 +35,7 @@ def main():
     client.post(f"/tasks/{task['id']}/assign", json={"assignee_id": eng["id"]})
     client.post(f"/tasks/{task['id']}/status", json={"status": "in_progress"})
 
-    print(f"Task #{task['id']}: {task['title']}")
+    print(f"\nTask #{task['id']}: {task['title']}")
     print(f"Assigned to: {eng['name']}")
     print(f"Status: in_progress")
 

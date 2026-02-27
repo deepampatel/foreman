@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-152_passing-6366f1?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-156_passing-6366f1?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP_tools-47-8b5cf6?style=flat-square" alt="MCP Tools" />
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
@@ -195,7 +195,7 @@ entourage logout                     # Remove stored credentials
 
 ```bash
 cd packages/backend
-uv run pytest tests/ -v          # 152 tests, ~14s
+uv run pytest tests/ -v          # 156 tests, ~14s
 uv run pytest tests/ --run-e2e   # Include live agent E2E tests
 ```
 
@@ -216,14 +216,15 @@ Learn how to actually use Entourage day-to-day:
 
 ## Examples
 
-Runnable scripts you can try right now ([examples/](examples/)):
+Runnable scripts you can try right now ([examples/](examples/)). All examples handle auth automatically — each run registers a fresh user and authenticates via JWT.
 
 ```bash
 python examples/quickstart.py           # Full lifecycle in 30 seconds
-python examples/multi_agent.py          # Two agents coordinating
+python examples/multi_agent.py          # Batch task DAG + two agents coordinating
 python examples/human_in_the_loop.py    # Agent pauses, asks human, continues
 python examples/code_review_flow.py     # Review → comments → approve → merge
 python examples/webhook_automation.py   # GitHub webhook + HMAC verification
+python examples/batch_orchestration.py  # DAG decomposition + 4 specialist agents
 ```
 
 ## Documentation
@@ -233,7 +234,7 @@ python examples/webhook_automation.py   # GitHub webhook + HMAC verification
 | [Architecture](docs/architecture.md) | System design, data flow, subsystems |
 | [Database Schema](docs/database.md) | 15 tables, relationships, migrations |
 | [Task State Machine](docs/tasks.md) | Transitions, DAG, review flow, event types |
-| [MCP Tools Reference](docs/mcp-tools.md) | All 44 tools with parameters |
+| [MCP Tools Reference](docs/mcp-tools.md) | All 47 tools with parameters |
 | [Development Guide](docs/development.md) | Setup, testing, patterns, project structure |
 
 ## Roadmap

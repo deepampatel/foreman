@@ -3,7 +3,7 @@
 Entourage Webhook Automation Example.
 
 Registers a GitHub webhook, simulates an incoming event,
-and verifies the delivery was processed.
+verifies HMAC-SHA256 signatures, and demonstrates event filtering.
 
 Run with: python examples/webhook_automation.py
 
@@ -15,10 +15,7 @@ import hashlib
 import hmac
 import json
 
-import httpx
-import uuid as _uuid
-
-BASE = "http://localhost:8000/api/v1"
+from _common import setup_workspace
 
 
 def generate_github_signature(secret: str, payload: bytes) -> str:
@@ -28,16 +25,11 @@ def generate_github_signature(secret: str, payload: bytes) -> str:
 
 
 def main():
-    run_id = _uuid.uuid4().hex[:6]
-    client = httpx.Client(base_url=BASE, timeout=10)
-
     # ── Setup ─────────────────────────────────────────────────────
-    print("Setting up workspace...\n")
-
-    org = client.post("/orgs", json={"name": "Webhook Demo", "slug": f"webhook-{run_id}"}).json()
-    team = client.post(f"/orgs/{org['id']}/teams", json={"name": "Backend", "slug": "backend"}).json()
-    print(f"Org: {org['name']}")
-    print(f"Team: {team['name']}")
+    ws = setup_workspace("Webhook Demo")
+    client = ws["client"]
+    team = ws["team"]
+    org = ws["org"]
 
     # ── Register webhook ──────────────────────────────────────────
     print("\n" + "═" * 60)
@@ -76,7 +68,9 @@ def main():
         "issue": {
             "number": 42,
             "title": "Login page crashes on Safari 17",
-            "body": "Steps to reproduce:\n1. Open /login in Safari 17\n2. Click 'Sign in with Google'\n3. Page crashes with blank screen\n\nExpected: OAuth redirect\nActual: White screen of death",
+            "body": "Steps to reproduce:\n1. Open /login in Safari 17\n"
+                    "2. Click 'Sign in with Google'\n3. Page crashes with blank screen\n\n"
+                    "Expected: OAuth redirect\nActual: White screen of death",
             "user": {"login": "jane-dev"},
             "labels": [{"name": "bug"}, {"name": "priority:high"}],
             "html_url": "https://github.com/example/app/issues/42"
