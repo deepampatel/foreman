@@ -352,3 +352,32 @@ class GitService:
                     "date": parts[4],
                 })
         return commits
+
+    # ─── Push Operations ─────────────────────────────────
+
+    async def push_branch(
+        self,
+        task_id: int,
+        repo_id: uuid.UUID,
+        remote: str = "origin",
+        force: bool = False,
+    ) -> GitResult:
+        """Push a task's branch to the remote.
+
+        Learn: After an agent finishes work, we push the branch so a
+        PR can be created. Uses --force-with-lease for safety when
+        force-pushing (prevents overwriting others' work).
+        """
+        task = await self._get_task(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+
+        repo = await self._get_repo(repo_id)
+        if not repo:
+            raise ValueError(f"Repository {repo_id} not found")
+
+        args = ["push", remote, task.branch]
+        if force:
+            args = ["push", "--force-with-lease", remote, task.branch]
+
+        return await _run_git(repo.local_path, *args, timeout=60.0)

@@ -14,11 +14,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from openclaw.db.models import MergeJob, Review, ReviewComment, Task
+from openclaw.db.models import Agent, MergeJob, Review, ReviewComment, Task
 from openclaw.events.store import EventStore
 from openclaw.events.types import (
     MERGE_QUEUED,
@@ -27,6 +28,8 @@ from openclaw.events.types import (
     REVIEW_FEEDBACK_SENT,
     REVIEW_VERDICT,
 )
+
+logger = structlog.get_logger()
 
 
 class ReviewNotFoundError(Exception):
@@ -60,11 +63,21 @@ class ReviewService:
         """Create a new review for a task.
 
         Learn: Auto-increments the attempt number. Each new review
-        request is a fresh review cycle.
+        request is a fresh review cycle. If no reviewer is specified,
+        checks for an idle reviewer agent in the team and auto-assigns.
+        If reviewer is an agent, sends them a message to trigger dispatch.
+        Also attempts to push the branch and create a PR.
         """
         task = await self.db.get(Task, task_id)
         if not task:
             raise TaskNotFoundError(f"Task {task_id} not found")
+
+        # ── Auto-assign to reviewer agent if none specified ────
+        if not reviewer_id:
+            reviewer_agent = await self._find_reviewer_agent(task.team_id)
+            if reviewer_agent:
+                reviewer_id = str(reviewer_agent.id)
+                reviewer_type = "agent"
 
         # Get current attempt number
         q = (
@@ -92,10 +105,19 @@ class ReviewService:
                 "task_id": task_id,
                 "attempt": next_attempt,
                 "reviewer_id": reviewer_id,
+                "reviewer_type": reviewer_type,
             },
         )
 
         await self.db.commit()
+
+        # ── Auto-push branch and create PR (best-effort) ──────
+        await self._auto_push_and_create_pr(task)
+
+        # ── Dispatch reviewer agent if assigned ────────────────
+        if reviewer_type == "agent" and reviewer_id:
+            await self._dispatch_reviewer_agent(task, review, reviewer_id)
+
         # Re-fetch with eagerly loaded comments (async can't lazy-load)
         return await self.get_review(review.id)
 
@@ -197,6 +219,18 @@ class ReviewService:
         if verdict == "request_changes":
             await self._handle_request_changes(review, summary)
 
+        # ── Handle agent approve: keep in in_review for human ──
+        # Agent approval is a first-pass check. The task stays in
+        # in_review so a human can do the final review. We don't
+        # auto-transition to in_approval.
+        if verdict == "approve" and reviewer_type == "agent":
+            logger.info(
+                "review.agent_approved",
+                task_id=review.task_id,
+                review_id=review_id,
+                msg="Agent approved — awaiting human review",
+            )
+
         # Re-fetch with eagerly loaded comments
         return await self.get_review(review.id)
 
@@ -265,6 +299,100 @@ class ReviewService:
             },
         )
         await self.db.commit()
+
+    # ─── Auto-assign reviewer agent ──────────────────────
+
+    async def _find_reviewer_agent(self, team_id) -> Optional[Agent]:
+        """Find an idle reviewer agent in the team.
+
+        Learn: If a team has agents with role='reviewer', they get
+        first-pass review before human review. This enables AI-powered
+        code review that catches bugs automatically.
+        """
+        q = (
+            select(Agent)
+            .where(
+                Agent.team_id == team_id,
+                Agent.role == "reviewer",
+                Agent.status == "idle",
+            )
+            .limit(1)
+        )
+        result = await self.db.execute(q)
+        return result.scalars().first()
+
+    # ─── Dispatch reviewer agent ──────────────────────────
+
+    async def _dispatch_reviewer_agent(
+        self, task: Task, review: Review, reviewer_id: str
+    ) -> None:
+        """Send a message to the reviewer agent to trigger dispatch.
+
+        Learn: The message triggers PG NOTIFY → dispatcher → reviewer
+        agent runs with review context. The reviewer prompt tells
+        the agent to read the diff and leave comments.
+        """
+        from openclaw.services.task_service import MessageService
+
+        msg_svc = MessageService(self.db)
+        review_msg = (
+            f"## Code Review Request\n\n"
+            f"Task #{task.id}: {task.title}\n\n"
+            f"Review ID: {review.id}\n"
+            f"Attempt: {review.attempt}\n\n"
+            f"Please review the code changes and provide feedback."
+        )
+        await msg_svc.send_message(
+            team_id=task.team_id,
+            sender_id=task.assignee_id or task.team_id,
+            sender_type="agent",
+            recipient_id=uuid.UUID(reviewer_id),
+            recipient_type="agent",
+            content=review_msg,
+            task_id=task.id,
+        )
+
+    # ─── Auto-push and create PR ──────────────────────────
+
+    async def _auto_push_and_create_pr(self, task: Task) -> None:
+        """Best-effort: push branch and create a GitHub PR.
+
+        Learn: This is fire-and-forget. If push fails (no remote, no
+        git config), or PR creation fails (gh not installed, not authed),
+        we log a warning and continue. The review flow should never break
+        because of PR creation failure.
+        """
+        if not task.repo_ids:
+            return
+
+        try:
+            from openclaw.services.git_service import GitService
+            from openclaw.services.pr_service import PRService
+
+            repo_id = task.repo_ids[0]
+            git_svc = GitService(self.db)
+            pr_svc = PRService(self.db, events=self.events)
+
+            # Push the branch
+            push_result = await git_svc.push_branch(task.id, repo_id)
+            if not push_result.ok:
+                logger.warning(
+                    "auto_pr.push_failed",
+                    task_id=task.id,
+                    error=push_result.stderr,
+                )
+                return
+
+            # Create the PR
+            pr_result = await pr_svc.create_pr(task.id, repo_id)
+            if "error" in pr_result:
+                logger.warning(
+                    "auto_pr.create_failed",
+                    task_id=task.id,
+                    error=pr_result["error"],
+                )
+        except Exception as e:
+            logger.warning("auto_pr.error", task_id=task.id, error=str(e))
 
     # ─── Get review ───────────────────────────────────────
 

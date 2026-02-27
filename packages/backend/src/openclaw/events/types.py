@@ -55,6 +55,12 @@ WEBHOOK_DELIVERY_PROCESSED = "webhook.delivery_processed"
 WEBHOOK_DELIVERY_FAILED = "webhook.delivery_failed"
 SETTINGS_UPDATED = "settings.updated"
 
+# ─── PR / Push events ────────────────────────────────────
+
+PR_CREATED = "pr.created"
+PR_PUSH_COMPLETED = "pr.push_completed"
+PR_PUSH_FAILED = "pr.push_failed"
+
 # ─── Phase 11: Agent adapter runs ───────────────────────
 
 AGENT_RUN_STARTED = "agent.run_started"
