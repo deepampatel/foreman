@@ -53,10 +53,12 @@ Any transition not in this table returns HTTP 409 Conflict.
 1. Manager creates task              → status: todo
 2. Manager assigns to engineer       → assignee set
 3. Engineer starts work              → status: in_progress
-4. Engineer finishes, submits        → status: in_review
-5. Reviewer approves code            → status: in_approval
-6. Manager approves for merge        → status: merging
-7. Merge worker merges the branch    → status: done
+4. Engineer creates worktree         → git branch isolated
+5. Engineer finishes, submits        → status: in_review
+6. Review requested                  → review.created event
+7. Reviewer approves code            → status: in_approval
+8. Manager approves for merge        → status: merging
+9. Merge worker merges the branch    → status: done
 ```
 
 ## Rejection / Failure Loops
@@ -101,6 +103,37 @@ POST /api/v1/tasks/2/status  {"status": "in_progress"}
 → 200 OK
 ```
 
+## Human-in-the-Loop Integration
+
+At any point during a task, an agent can pause to request human input:
+
+```
+Agent working on task → ask_human("Should I refactor the auth module?")
+  → HumanRequest created (status: pending)
+  → Agent waits for response
+  → Human responds via dashboard or API
+  → PG NOTIFY fires → Dispatcher resumes agent
+```
+
+Request types:
+- **question** — Free-text answer
+- **approval** — Yes/no decision
+- **review** — Code/work review
+
+## Code Review Flow
+
+```
+1. Agent completes work              → request_review(task_id)
+2. Review created                    → attempt=1, verdict=null
+3. Reviewer adds comments            → review_comments table
+4. Reviewer renders verdict          → approve / reject / request_changes
+5a. If approved                      → task moves to in_approval
+5b. If rejected/request_changes      → task moves back to in_progress
+                                       → new review attempt on resubmit
+```
+
+Multiple review cycles are tracked via the `attempt` field. Each cycle is a fresh review.
+
 ## Event Sourcing
 
 Every task state change is recorded as an immutable event in the `events` table.
@@ -109,12 +142,15 @@ Every task state change is recorded as an immutable event in the `events` table.
 stream_id   type                  data
 ──────────  ────────────────────  ──────────────────────────────────
 task:1      task.created          {"title": "Fix login", "priority": "high"}
-task:1      task.status_changed   {"from": "todo", "to": "in_progress"}
 task:1      task.assigned         {"from": null, "to": "<agent-uuid>"}
+task:1      task.status_changed   {"from": "todo", "to": "in_progress"}
 task:1      task.updated          {"priority": "critical"}
 task:1      task.status_changed   {"from": "in_progress", "to": "in_review"}
+task:1      review.created        {"review_id": 1, "attempt": 1}
+task:1      review.verdict        {"verdict": "approve", "reviewer_id": "..."}
 task:1      task.status_changed   {"from": "in_review", "to": "in_approval"}
 task:1      task.status_changed   {"from": "in_approval", "to": "merging"}
+task:1      merge.completed       {"merge_commit": "abc123"}
 task:1      task.status_changed   {"from": "merging", "to": "done"}
 ```
 
@@ -122,13 +158,49 @@ Query the full history: `GET /api/v1/tasks/1/events`
 
 ## Event Types
 
+### Task events
 | Type | When | Data |
 |------|------|------|
 | `task.created` | Task created | title, priority, team_id, assignee_id, depends_on |
 | `task.updated` | Fields changed (not status) | Changed fields only |
 | `task.status_changed` | Status transition | from, to, actor_id |
 | `task.assigned` | Assignee changed | from, to |
+| `task.comment_added` | Comment added | content, author |
 | `message.sent` | Message sent | sender_id, recipient_id, task_id |
+
+### Session events
+| Type | When | Data |
+|------|------|------|
+| `session.started` | Agent session begins | agent_id, task_id, model |
+| `session.ended` | Agent session ends | cost_usd, tokens, error |
+| `session.usage_recorded` | Token usage recorded | tokens_in, tokens_out |
+| `agent.budget_exceeded` | Budget limit hit | agent_id, limit |
+
+### Human-in-the-loop events
+| Type | When | Data |
+|------|------|------|
+| `human_request.created` | Agent requests human input | kind, question |
+| `human_request.resolved` | Human responds | response, responded_by |
+| `human_request.expired` | Request timed out | |
+
+### Review & merge events
+| Type | When | Data |
+|------|------|------|
+| `review.created` | Review requested | task_id, attempt |
+| `review.verdict` | Verdict rendered | verdict, reviewer_id |
+| `review.comment_added` | Comment on review | file_path, line_number |
+| `merge.queued` | Merge job created | task_id, strategy |
+| `merge.started` | Merge worker picks up job | |
+| `merge.completed` | Merge succeeded | merge_commit |
+| `merge.failed` | Merge failed | error |
+
+### Webhook & settings events
+| Type | When | Data |
+|------|------|------|
+| `webhook.created` | Webhook configured | org_id, provider |
+| `webhook.delivery_received` | Incoming payload | event_type |
+| `webhook.delivery_processed` | Successfully processed | actions |
+| `settings.updated` | Team settings changed | changes |
 
 ## Priority Levels
 

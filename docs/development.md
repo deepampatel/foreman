@@ -57,7 +57,7 @@ All config is via environment variables with the `OPENCLAW_` prefix.
 | `OPENCLAW_DATABASE_URL` | `postgresql+asyncpg://openclaw:openclaw_dev@localhost:5433/openclaw` | Database connection |
 | `OPENCLAW_REDIS_URL` | `redis://localhost:6379/0` | Redis connection |
 | `OPENCLAW_ANTHROPIC_API_KEY` | `""` | For built-in agent runner |
-| `OPENCLAW_JWT_SECRET` | `change-me-in-production` | JWT signing key |
+| `OPENCLAW_JWT_SECRET` | `change-me-in-production` | JWT signing key (min 32 bytes recommended) |
 | `OPENCLAW_DEBUG` | `false` | Enable SQL echo logging |
 | `OPENCLAW_ENVIRONMENT` | `development` | Environment name |
 | `OPENCLAW_API_URL` | `http://localhost:8000` | MCP server → backend URL |
@@ -66,7 +66,8 @@ All config is via environment variables with the `OPENCLAW_` prefix.
 
 ```bash
 cd packages/backend
-uv run pytest tests/ -v
+uv run pytest tests/ -v        # all 147 tests, ~10s
+uv run pytest tests/ -v -k auth   # run only auth tests
 ```
 
 ### Test Architecture
@@ -81,16 +82,23 @@ This means:
 - Tests run against the real database (not mocks)
 - Tests are fully isolated — no data leaks between tests
 - No cleanup needed — rollback handles everything
-- Fast — 36 tests in ~2.7 seconds
+- Fast — 147 tests in ~10 seconds
 
 ### Test Structure
 
 ```
 tests/
-  conftest.py           Fixtures: db_session (savepoint), client (HTTP)
-  test_health.py        Smoke test
-  test_teams_api.py     Phase 1: orgs, teams, agents, repos (17 tests)
-  test_tasks_api.py     Phase 2: tasks, state machine, deps, messages (19 tests)
+  conftest.py                      Fixtures: db_session (savepoint), client (HTTP), raw_db
+  test_health.py                   Smoke test (1 test)
+  test_teams_api.py                Phase 1: orgs, teams, agents, repos (17 tests)
+  test_tasks_api.py                Phase 2: tasks, state machine, deps, messages (19 tests)
+  test_git_api.py                  Phase 3: worktrees, diffs, file reading (14 tests)
+  test_sessions_api.py             Phase 4: sessions, cost tracking, budgets (16 tests)
+  test_human_requests_api.py       Phase 7: human-in-the-loop (15 tests)
+  test_reviews_api.py              Phase 8: reviews, verdicts, merge (22 tests)
+  test_dispatch_api.py             Phase 6: dispatch status, PG triggers (8 tests)
+  test_auth_api.py                 Phase 9: register, login, JWT, API keys (16 tests)
+  test_webhooks_settings_api.py    Phase 10: webhooks, settings (19 tests)
 ```
 
 ### Writing New Tests
@@ -125,6 +133,35 @@ async def test_with_db(client, db_session):
     events = list(result.scalars().all())
 ```
 
+For tests that need to inspect schema-level objects (triggers, functions):
+
+```python
+@pytest.mark.asyncio
+async def test_trigger_exists(raw_db):
+    """raw_db fixture — bypasses savepoints for schema inspection."""
+    from sqlalchemy import text
+    result = await raw_db.execute(text(
+        "SELECT tgname FROM pg_trigger WHERE tgname = 'trg_message_notify'"
+    ))
+    assert result.scalar() is not None
+```
+
+### Key Testing Gotcha: Async Lazy Loading
+
+SQLAlchemy async does not support lazy loading of relationships. When returning ORM objects with relationships from async endpoints:
+
+```python
+# BAD — will raise MissingGreenlet when FastAPI serializes
+review = await db.get(Review, review_id, options=[selectinload(Review.comments)])
+
+# GOOD — fresh SELECT query forces eager loading
+q = select(Review).where(Review.id == review_id).options(selectinload(Review.comments))
+result = await db.execute(q)
+review = result.scalars().first()
+```
+
+The `db.get()` with `selectinload` can return a cached identity map object without re-running the query. Always use a fresh `select()` when you need eagerly loaded relationships.
+
 ## Database Migrations
 
 Migrations are auto-generated from model changes using Alembic.
@@ -135,20 +172,40 @@ cd packages/backend
 # After changing models.py:
 uv run alembic revision --autogenerate -m "description of change"
 
+# For manual migrations (e.g., PG triggers):
+uv run alembic revision -m "description of change"
+# Then edit the generated file to add raw SQL
+
 # Apply:
 uv run alembic upgrade head
 
 # Rollback one step:
 uv run alembic downgrade -1
+
+# Show current revision:
+uv run alembic current
 ```
+
+### Current Migrations
+
+| Revision | Description |
+|----------|-------------|
+| `858c9f17a644` | Phase 1: orgs, teams, users, agents, repos, events, sessions |
+| `0ac40d24a4c8` | Phase 2: tasks and messages |
+| `31a70288aa72` | Phase 7: human_requests |
+| `ba9513c684e2` | Phase 8: reviews, review_comments, merge_jobs |
+| `85a67264382e` | Phase 6: PG LISTEN/NOTIFY triggers (manual) |
+| `b9273a98ca4c` | Phase 9: api_keys |
+| `8fd38d37a5f3` | Phase 10: webhooks, webhook_deliveries |
+| `d29768ed705e` | Phase 10: teams.config column |
 
 ## Project Structure
 
 ```
-foreman/
+openclaw/
 ├── docker-compose.yml                  Postgres 16 (port 5433) + Redis 7
 ├── pnpm-workspace.yaml                 Monorepo config
-├── .github/workflows/ci.yml            CI pipeline
+├── package.json                        Root package.json
 │
 ├── packages/
 │   ├── backend/                        Python — FastAPI
@@ -160,28 +217,52 @@ foreman/
 │   │   │   ├── main.py                 App factory, lifespan, CORS
 │   │   │   ├── config.py              pydantic-settings
 │   │   │   ├── api/
-│   │   │   │   ├── __init__.py         Router aggregation
+│   │   │   │   ├── __init__.py         Router aggregation (11 routers)
 │   │   │   │   ├── health.py           Health check (Postgres + Redis)
 │   │   │   │   ├── teams.py            Org/Team/Agent/Repo CRUD
-│   │   │   │   └── tasks.py            Tasks + state machine + messages
+│   │   │   │   ├── tasks.py            Tasks + state machine + messages
+│   │   │   │   ├── git.py              Worktrees, diffs, file reading
+│   │   │   │   ├── sessions.py         Sessions, costs, budgets
+│   │   │   │   ├── human_requests.py   Human-in-the-loop
+│   │   │   │   ├── reviews.py          Code reviews + merge
+│   │   │   │   ├── dispatch.py         Dispatch status
+│   │   │   │   ├── auth.py             Register, login, JWT, API keys
+│   │   │   │   ├── webhooks.py         Webhook CRUD + receiver
+│   │   │   │   └── settings.py         Team/org settings
+│   │   │   ├── auth/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── password.py         SHA-256 + salt password hashing
+│   │   │   │   ├── jwt.py              JWT token create/verify
+│   │   │   │   └── dependencies.py     FastAPI auth deps (JWT + API key)
 │   │   │   ├── db/
-│   │   │   │   ├── models.py           10 ORM models (source of truth)
+│   │   │   │   ├── models.py           15 ORM models (source of truth)
 │   │   │   │   ├── engine.py           Async engine + get_db dependency
-│   │   │   │   └── migrations/         Alembic versions
+│   │   │   │   └── migrations/         8 Alembic versions
+│   │   │   ├── dispatcher/
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── turn_dispatcher.py  PG LISTEN/NOTIFY dispatcher
+│   │   │   │   └── main.py             CLI entry point
 │   │   │   ├── services/
 │   │   │   │   ├── team_service.py     Team logic + auto-provision
-│   │   │   │   └── task_service.py     State machine + DAG + messages
+│   │   │   │   ├── task_service.py     State machine + DAG + messages
+│   │   │   │   ├── session_service.py  Session + cost management
+│   │   │   │   ├── human_loop.py       Human request lifecycle
+│   │   │   │   ├── review_service.py   Reviews + merge jobs
+│   │   │   │   └── webhook_service.py  Webhook CRUD + event processing
 │   │   │   ├── events/
 │   │   │   │   ├── store.py            Append-only EventStore
-│   │   │   │   └── types.py            Event type constants
+│   │   │   │   └── types.py            Event type constants (30+ types)
 │   │   │   └── schemas/
 │   │   │       ├── team.py             Pydantic models (request/response)
-│   │   │       └── task.py
-│   │   └── tests/
+│   │   │       ├── task.py
+│   │   │       ├── session.py
+│   │   │       ├── human_request.py
+│   │   │       └── review.py
+│   │   └── tests/                      147 tests across 11 files
 │   │
 │   ├── mcp-server/                     TypeScript — MCP tools
 │   │   ├── src/
-│   │   │   ├── index.ts                19 tool definitions
+│   │   │   ├── index.ts                44 tool definitions
 │   │   │   └── client.ts               Typed HTTP client
 │   │   ├── tsconfig.json
 │   │   └── package.json
@@ -195,10 +276,10 @@ foreman/
 │       └── tsconfig.json
 │
 └── docs/                               Documentation
-    ├── architecture.md
-    ├── database.md
-    ├── tasks.md
-    ├── mcp-tools.md
+    ├── architecture.md                 System design, data flow
+    ├── database.md                     All tables, relationships
+    ├── tasks.md                        State machine, DAG, events
+    ├── mcp-tools.md                    44 tools with parameters
     └── development.md                  (this file)
 ```
 
@@ -243,3 +324,19 @@ class TaskRead(BaseModel):      # What the API returns
     created_at: datetime
     model_config = {"from_attributes": True}
 ```
+
+### Auth Patterns
+
+Endpoints can require authentication via FastAPI dependencies:
+
+```python
+from openclaw.auth.dependencies import get_current_user, CurrentIdentity
+
+@router.get("/protected")
+async def protected_endpoint(identity: CurrentIdentity = Depends(get_current_user)):
+    # identity.identity_type = "user" or "api_key"
+    # identity.user_id or identity.org_id
+    ...
+```
+
+Supports both JWT Bearer tokens and `x-api-key` header authentication.

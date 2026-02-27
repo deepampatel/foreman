@@ -3,17 +3,17 @@
 ## Entity Relationship Diagram
 
 ```
-┌──────────────┐       ┌──────────────┐
-│organizations │       │    users     │
-│──────────────│       │──────────────│
-│ id (UUID) PK │       │ id (UUID) PK │
-│ name         │       │ email UNIQUE │
-│ slug UNIQUE  │       │ name         │
-│ created_at   │       │ password_hash│
-│ updated_at   │       │ created_at   │
-└──────┬───────┘       └──────┬───────┘
-       │ 1:N                  │
-       ▼                      │
+┌──────────────┐       ┌──────────────┐       ┌──────────────┐
+│organizations │       │    users     │       │   api_keys   │
+│──────────────│       │──────────────│       │──────────────│
+│ id (UUID) PK │       │ id (UUID) PK │       │ id (UUID) PK │
+│ name         │       │ email UNIQUE │       │ org_id FK    │
+│ slug UNIQUE  │       │ name         │       │ name         │
+│ created_at   │       │ password_hash│       │ key_hash     │
+│ updated_at   │       │ created_at   │       │ prefix       │
+└──────┬───────┘       └──────┬───────┘       │ scopes[]     │
+       │ 1:N                  │               │ expires_at   │
+       ▼                      │               └──────────────┘
 ┌──────────────┐    ┌─────────▼────────┐
 │    teams     │    │  team_members    │
 │──────────────│    │──────────────────│
@@ -21,7 +21,8 @@
 │ org_id FK    │    │ user_id FK       │
 │ name         │    │ role             │
 │ slug         │    │ UNIQUE(team,user)│
-│ UNIQUE(org,  │    └──────────────────┘
+│ config JSONB │    └──────────────────┘
+│ UNIQUE(org,  │
 │   slug)      │
 │ created_at   │
 └──┬───┬───┬───┘
@@ -30,31 +31,31 @@
    │   │   ▼
    │   │ ┌──────────────────┐
    │   │ │   repositories   │
-   │   │ │──────────────────│
-   │   │ │ id (UUID) PK     │
-   │   │ │ team_id FK       │
-   │   │ │ name             │
-   │   │ │ local_path       │
-   │   │ │ default_branch   │
-   │   │ │ config (JSONB)   │
-   │   │ │ UNIQUE(team,name)│
-   │   │ │ created_at       │
-   │   │ └──────────────────┘
-   │   │
-   │   │ 1:N
-   │   ▼
-   │ ┌──────────────────┐
-   │ │     agents       │
-   │ │──────────────────│
-   │ │ id (UUID) PK     │
-   │ │ team_id FK       │
-   │ │ name             │
-   │ │ role             │  manager | engineer | reviewer
-   │ │ model            │  default: claude-sonnet-4-20250514
-   │ │ config (JSONB)   │  token budgets, tool restrictions
-   │ │ status           │  idle | working | paused
-   │ │ UNIQUE(team,name)│
-   │ │ created_at       │
+   │   │ │──────────────────│       ┌──────────────────┐
+   │   │ │ id (UUID) PK     │       │    webhooks      │
+   │   │ │ team_id FK       │       │──────────────────│
+   │   │ │ name             │       │ id (UUID) PK     │
+   │   │ │ local_path       │       │ org_id FK        │
+   │   │ │ default_branch   │       │ team_id FK       │
+   │   │ │ config (JSONB)   │       │ name             │
+   │   │ │ UNIQUE(team,name)│       │ provider         │
+   │   │ │ created_at       │       │ secret           │
+   │   │ └──────────────────┘       │ events[]         │
+   │   │                            │ active           │
+   │   │ 1:N                        │ config JSONB     │
+   │   ▼                            └────────┬─────────┘
+   │ ┌──────────────────┐                    │ 1:N
+   │ │     agents       │           ┌────────▼─────────┐
+   │ │──────────────────│           │webhook_deliveries│
+   │ │ id (UUID) PK     │           │──────────────────│
+   │ │ team_id FK       │           │ id (SERIAL) PK   │
+   │ │ name             │           │ webhook_id FK    │
+   │ │ role             │           │ event_type       │
+   │ │ model            │           │ payload JSONB    │
+   │ │ config (JSONB)   │           │ status           │
+   │ │ status           │           │ error            │
+   │ │ UNIQUE(team,name)│           │ created_at       │
+   │ │ created_at       │           └──────────────────┘
    │ └──────────────────┘
    │
    │ 1:N
@@ -66,9 +67,9 @@
 │ team_id FK         │     │ id (SERIAL) PK   │
 │ title              │     │ team_id FK       │
 │ description        │     │ sender_id        │
-│ status             │     │ sender_type      │  agent | user
+│ status             │     │ sender_type      │
 │ priority           │     │ recipient_id     │
-│ dri_id FK→agents   │     │ recipient_type   │  agent | user
+│ dri_id FK→agents   │     │ recipient_type   │
 │ assignee_id FK     │     │ content          │
 │ depends_on INT[]   │     │ delivered_at     │
 │ repo_ids UUID[]    │     │ seen_at          │
@@ -76,9 +77,27 @@
 │ branch             │     │ created_at       │
 │ metadata JSONB     │     └──────────────────┘
 │ created_at         │
-│ updated_at         │
-│ completed_at       │
-└────────────────────┘
+│ updated_at         │     ┌──────────────────┐
+│ completed_at       │     │ human_requests   │
+└──────────┬─────────┘     │──────────────────│
+           │               │ id (SERIAL) PK   │
+           │               │ team_id FK       │
+           │               │ agent_id FK      │
+           │               │ task_id FK       │
+           │               │ kind             │
+           │               │ question         │
+           │               │ options[]        │
+           │               │ status           │
+           │               │ response         │
+           │               │ responded_by     │
+           │               │ timeout_at       │
+           │               │ created_at       │
+           │               │ resolved_at      │
+           │               └──────────────────┘
+           │
+           ├──── reviews ──── review_comments
+           │
+           └──── merge_jobs
 
 ┌──────────────────┐     ┌──────────────────┐
 │     events       │     │    sessions      │
@@ -122,9 +141,30 @@ Scopes work within an org. Each team has its own agents, repos, and tasks.
 | org_id | UUID FK→organizations | |
 | name | VARCHAR(100) | |
 | slug | VARCHAR(100) | Unique per org |
+| config | JSONB | Team settings: budget limits, model prefs, workflow config |
 | created_at | TIMESTAMPTZ | |
 
 Creating a team auto-provisions a manager agent.
+
+### users
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| email | VARCHAR(255) | Unique |
+| name | VARCHAR(100) | |
+| password_hash | VARCHAR(255) | Nullable (for OAuth users) |
+| created_at | TIMESTAMPTZ | |
+
+### team_members
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| team_id | UUID FK→teams | |
+| user_id | UUID FK→users | |
+| role | VARCHAR(50) | `owner`, `admin`, `member` |
+| | | UNIQUE(team_id, user_id) |
 
 ### agents
 
@@ -139,6 +179,18 @@ AI agents within a team.
 | model | VARCHAR(50) | Default: `claude-sonnet-4-20250514` |
 | config | JSONB | Token budgets, allowed tools, etc. |
 | status | VARCHAR(20) | `idle`, `working`, `paused` |
+| created_at | TIMESTAMPTZ | |
+
+### repositories
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| team_id | UUID FK→teams | |
+| name | VARCHAR(100) | Unique per team |
+| local_path | TEXT | Filesystem path |
+| default_branch | VARCHAR(100) | Default: `main` |
+| config | JSONB | Approval mode, test commands, etc. |
 | created_at | TIMESTAMPTZ | |
 
 ### tasks
@@ -168,7 +220,7 @@ Central entity. Flows through a DAG-enforced state machine.
 
 ### messages
 
-Inter-agent and human-agent communication.
+Inter-agent and human-agent communication. Insert trigger fires PG NOTIFY for dispatcher.
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -186,6 +238,7 @@ Inter-agent and human-agent communication.
 | created_at | TIMESTAMPTZ | |
 
 **Indexes:** `(recipient_id, processed_at)`, `(task_id)`
+**Trigger:** `notify_new_message()` — fires PG NOTIFY on INSERT
 
 ### events
 
@@ -194,8 +247,8 @@ Append-only event log. Source of truth for event sourcing.
 | Column | Type | Notes |
 |--------|------|-------|
 | id | SERIAL | Primary key, monotonic |
-| stream_id | VARCHAR(200) | e.g. `task:42`, `team:<uuid>` |
-| type | VARCHAR(100) | e.g. `task.created`, `task.status_changed` |
+| stream_id | VARCHAR(200) | e.g. `task:42`, `team:<uuid>`, `webhook:<uuid>` |
+| type | VARCHAR(100) | e.g. `task.created`, `review.verdict`, `webhook.delivery_received` |
 | data | JSONB | Event payload |
 | metadata | JSONB | actor_id, correlation_id, causation_id |
 | created_at | TIMESTAMPTZ | |
@@ -223,10 +276,144 @@ Tracks agent work sessions for cost control.
 | model | VARCHAR(50) | Model used |
 | error | TEXT | Error message if session failed |
 
+### human_requests
+
+Agent requests for human input — questions, approvals, reviews.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | Primary key |
+| team_id | UUID FK→teams | |
+| agent_id | UUID FK→agents | |
+| task_id | INTEGER FK→tasks | Optional |
+| kind | VARCHAR(30) | `question`, `approval`, `review` |
+| question | TEXT | The request text |
+| options | TEXT[] | Pre-defined answer options |
+| status | VARCHAR(20) | `pending`, `resolved`, `expired` |
+| response | TEXT | Human's response |
+| responded_by | UUID | User who responded |
+| timeout_at | TIMESTAMPTZ | Auto-expire time |
+| created_at | TIMESTAMPTZ | |
+| resolved_at | TIMESTAMPTZ | |
+
+**Indexes:** `(team_id, status)`
+**Trigger:** `notify_human_request_resolved()` — fires PG NOTIFY on status UPDATE
+
+### reviews
+
+Code review for a task. Multiple review attempts tracked.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | Primary key |
+| task_id | INTEGER FK→tasks | |
+| attempt | INTEGER | Auto-incremented per task |
+| reviewer_id | UUID | User or agent who reviewed |
+| reviewer_type | VARCHAR(10) | `user` or `agent` |
+| verdict | VARCHAR(20) | `approve`, `request_changes`, `reject` (null = pending) |
+| summary | TEXT | Review summary |
+| created_at | TIMESTAMPTZ | |
+| resolved_at | TIMESTAMPTZ | |
+
+**Constraints:** UNIQUE(task_id, attempt)
+
+### review_comments
+
+Comments anchored to specific files/lines in a review.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | Primary key |
+| review_id | INTEGER FK→reviews | |
+| author_id | UUID | |
+| author_type | VARCHAR(10) | `user` or `agent` |
+| file_path | TEXT | Optional file anchor |
+| line_number | INTEGER | Optional line anchor |
+| content | TEXT | Comment text |
+| created_at | TIMESTAMPTZ | |
+
+### merge_jobs
+
+Background merge jobs queued after review approval.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | Primary key |
+| task_id | INTEGER FK→tasks | |
+| repo_id | UUID FK→repositories | |
+| status | VARCHAR(20) | `queued`, `running`, `success`, `failed` |
+| strategy | VARCHAR(20) | `rebase`, `merge`, `squash` |
+| error | TEXT | Error message if failed |
+| merge_commit | VARCHAR(40) | SHA of merge commit |
+| created_at | TIMESTAMPTZ | |
+| started_at | TIMESTAMPTZ | |
+| completed_at | TIMESTAMPTZ | |
+
+### api_keys
+
+API keys for programmatic access (agents, CI systems).
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| org_id | UUID FK→organizations | |
+| name | VARCHAR(100) | |
+| key_hash | VARCHAR(255) | SHA-256 hash (key never stored) |
+| prefix | VARCHAR(10) | e.g. `oc_abc123` for identification |
+| scopes | TEXT[] | `all`, `read`, `agent` |
+| last_used_at | TIMESTAMPTZ | |
+| created_at | TIMESTAMPTZ | |
+| expires_at | TIMESTAMPTZ | Optional expiry |
+
+### webhooks
+
+Incoming webhook configurations for GitHub/GitLab/etc.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | UUID | Primary key |
+| org_id | UUID FK→organizations | |
+| team_id | UUID FK→teams | Optional (null = org-wide) |
+| name | VARCHAR(100) | |
+| provider | VARCHAR(30) | `github`, `gitlab`, `bitbucket`, `custom` |
+| secret | VARCHAR(255) | HMAC signing secret |
+| events | TEXT[] | Event types to listen for |
+| active | BOOLEAN | Enable/disable |
+| config | JSONB | Provider-specific config |
+| created_at | TIMESTAMPTZ | |
+| updated_at | TIMESTAMPTZ | |
+
+### webhook_deliveries
+
+Audit trail for incoming webhook payloads.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| id | SERIAL | Primary key |
+| webhook_id | UUID FK→webhooks | |
+| event_type | VARCHAR(50) | `push`, `pull_request`, `issues`, etc. |
+| payload | JSONB | Incoming payload (sanitized) |
+| status | VARCHAR(20) | `received`, `processed`, `failed`, `ignored` |
+| error | TEXT | Error message if processing failed |
+| created_at | TIMESTAMPTZ | |
+
 ## PostgreSQL-Specific Features
 
 - **JSONB** for flexible config and event data (indexable, queryable)
-- **ARRAY columns** for `depends_on`, `repo_ids`, `tags` (native PostgreSQL, not JSON strings)
+- **ARRAY columns** for `depends_on`, `repo_ids`, `tags`, `scopes`, `events` (native PostgreSQL)
 - **UUID primary keys** for distributed-safe IDs
-- **LISTEN/NOTIFY** (Phase 6) for instant agent dispatch
-- **Row-level security** (Phase 9) for multi-tenant isolation
+- **LISTEN/NOTIFY** for instant agent dispatch via PG triggers
+- **Trigger functions**: `notify_new_message()`, `notify_human_request_resolved()`, `notify_task_status_changed()`
+
+## Alembic Migrations
+
+| Revision | Description |
+|----------|-------------|
+| `858c9f17a644` | Phase 1: orgs, teams, users, agents, repos, events, sessions |
+| `0ac40d24a4c8` | Phase 2: tasks and messages |
+| `31a70288aa72` | Phase 7: human_requests table |
+| `ba9513c684e2` | Phase 8: reviews, review_comments, merge_jobs |
+| `85a67264382e` | Phase 6: PG LISTEN/NOTIFY trigger functions |
+| `b9273a98ca4c` | Phase 9: api_keys table |
+| `8fd38d37a5f3` | Phase 10: webhooks and webhook_deliveries |
+| `d29768ed705e` | Phase 10: add config column to teams |

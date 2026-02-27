@@ -1,6 +1,8 @@
 # MCP Tools Reference
 
-Foreman exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
+OpenClaw exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
+
+**Total tools: 44**
 
 ## Connection
 
@@ -8,14 +10,14 @@ Foreman exposes all platform capabilities as MCP tools. AI agents discover and c
 OPENCLAW_API_URL=http://localhost:8000 node packages/mcp-server/dist/index.js
 ```
 
-The MCP server communicates via stdio. Any MCP-compatible client (Claude, OpenClaw, etc.) can connect.
+The MCP server communicates via stdio. Any MCP-compatible client (Claude, etc.) can connect.
 
 ---
 
 ## Platform
 
 ### `ping`
-Check if the Foreman platform is reachable and healthy.
+Check if the OpenClaw platform is reachable and healthy.
 
 **Parameters:** none
 
@@ -139,7 +141,7 @@ Get detailed info about a single task.
 | `task_id` | number | yes | Task ID |
 
 ### `update_task`
-Update task fields. Does NOT change status (use `change_task_status` for that).
+Update task fields. Does NOT change status (use `change_task_status`).
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -150,7 +152,7 @@ Update task fields. Does NOT change status (use `change_task_status` for that).
 | `tags` | string[] | no | New tags |
 
 ### `change_task_status`
-Change task status. Validates transitions and enforces DAG dependencies. Returns 409 if the transition is invalid or dependencies are unresolved.
+Change task status. Validates transitions and enforces DAG dependencies. Returns 409 if invalid.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -180,7 +182,7 @@ Get the immutable event history for a task.
 ## Messages
 
 ### `send_message`
-Send a message to an agent or user.
+Send a message to an agent or user. Triggers PG NOTIFY for dispatcher.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -193,7 +195,7 @@ Send a message to an agent or user.
 | `task_id` | number | no | Related task ID |
 
 ### `get_inbox`
-Get an agent's inbox — messages addressed to them.
+Get an agent's inbox.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -202,16 +204,252 @@ Get an agent's inbox — messages addressed to them.
 
 ---
 
-## Planned Tools (Phase 3+)
+## Git (Phase 3)
 
-| Phase | Tool | Description |
-|-------|------|-------------|
-| 3 | `get_task_diff` | Get git diff for a task's branch |
-| 3 | `get_task_files` | List changed files for a task |
-| 4 | `start_session` | Start an agent work session |
-| 4 | `record_usage` | Record token/cost usage |
-| 4 | `check_budget` | Check remaining budget |
-| 7 | `ask_human` | Request human input |
-| 7 | `respond_to_request` | Human responds to agent question |
-| 8 | `approve_task` | Approve a task for merge |
-| 8 | `reject_task` | Reject a task with feedback |
+### `create_worktree`
+Create a git worktree for a task (branch-per-task isolation).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+
+### `get_worktree`
+Get worktree info for a task.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+
+### `remove_worktree`
+Remove a task's worktree.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+
+### `get_task_diff`
+Get the git diff for a task's branch.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+
+### `get_changed_files`
+List files changed in a task's branch.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+
+### `read_file`
+Read a file from a task's branch.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `repo_id` | string | yes | Repository UUID |
+| `path` | string | yes | File path within the repo |
+
+### `get_commits`
+Get commit history for a task's branch.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | number | yes | | Task ID |
+| `repo_id` | string | yes | | Repository UUID |
+| `limit` | number | no | 20 | Max commits to return |
+
+---
+
+## Sessions & Costs (Phase 4)
+
+### `start_session`
+Start an agent work session. Tracks tokens, cost, and time.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | string | yes | Agent UUID |
+| `task_id` | number | no | Task being worked on |
+| `model` | string | no | Model override |
+
+### `record_usage`
+Record token usage during a session.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `session_id` | number | yes | | Session ID |
+| `tokens_in` | number | no | 0 | Input tokens |
+| `tokens_out` | number | no | 0 | Output tokens |
+| `cache_read` | number | no | 0 | Cache tokens read |
+| `cache_write` | number | no | 0 | Cache tokens written |
+
+### `end_session`
+End a session. Sets agent back to idle.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `session_id` | number | yes | Session ID |
+| `error` | string | no | Error message if session failed |
+
+### `check_budget`
+Check if an agent has budget remaining (daily and per-task limits).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `agent_id` | string | yes | Agent UUID |
+| `task_id` | number | no | Task ID for task-level budget check |
+
+### `get_cost_summary`
+Get cost summary for a team — per-agent and per-model breakdown.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `team_id` | string | yes | | Team UUID |
+| `days` | number | no | 7 | Lookback period |
+
+---
+
+## Human-in-the-Loop (Phase 7)
+
+### `ask_human`
+Ask a human for input. Creates a persistent request shown in the dashboard.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `team_id` | string | yes | | Team UUID |
+| `agent_id` | string | yes | | Agent UUID making the request |
+| `kind` | string | yes | | `question`, `approval`, or `review` |
+| `question` | string | yes | | The question or request text |
+| `task_id` | number | no | | Related task ID |
+| `options` | string[] | no | `[]` | Pre-defined answer options |
+| `timeout_minutes` | number | no | | Auto-expire after N minutes |
+
+### `get_pending_requests`
+Get pending human requests for a team.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |
+| `agent_id` | string | no | Filter by agent |
+| `task_id` | number | no | Filter by task |
+
+### `respond_to_request`
+Respond to a pending human request.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `request_id` | number | yes | Human request ID |
+| `response` | string | yes | The response text |
+| `responded_by` | string | no | User UUID |
+
+---
+
+## Reviews & Merge (Phase 8)
+
+### `request_review`
+Request a code review for a task.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | number | yes | | Task ID to review |
+| `reviewer_id` | string | no | | Reviewer UUID |
+| `reviewer_type` | string | no | `user` | `user` or `agent` |
+
+### `approve_task`
+Approve the latest review for a task.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID to approve |
+| `summary` | string | no | Approval notes |
+| `reviewer_id` | string | no | Reviewer UUID |
+
+### `reject_task`
+Reject the latest review for a task.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID to reject |
+| `summary` | string | no | Rejection feedback |
+| `reviewer_id` | string | no | Reviewer UUID |
+
+### `get_merge_status`
+Get merge readiness status — review verdict, merge jobs, can_merge flag.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+
+---
+
+## Auth (Phase 9)
+
+### `authenticate`
+Validate an API key and return the scoped identity.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `api_key` | string | yes | API key to validate (e.g. `oc_...`) |
+
+---
+
+## Webhooks (Phase 10)
+
+### `create_webhook`
+Create a webhook to receive events from GitHub/GitLab.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `org_id` | string | yes | | Organization UUID |
+| `name` | string | yes | | Webhook name |
+| `team_id` | string | no | | Scope to a team |
+| `provider` | string | no | `github` | `github`, `gitlab`, `bitbucket`, `custom` |
+| `events` | string[] | no | `["push", "pull_request"]` | Event types to listen for |
+
+### `list_webhooks`
+List webhooks for an organization.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `org_id` | string | yes | | Organization UUID |
+| `team_id` | string | no | | Filter by team |
+| `active_only` | boolean | no | false | Only show active webhooks |
+
+### `update_webhook`
+Update a webhook configuration.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `webhook_id` | string | yes | Webhook UUID |
+| `name` | string | no | New name |
+| `events` | string[] | no | New event types |
+| `active` | boolean | no | Enable/disable |
+
+---
+
+## Settings (Phase 10)
+
+### `get_team_settings`
+Get team-level configuration.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |
+
+### `update_team_settings`
+Update team configuration. Only provided fields are changed (merge behavior).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |
+| `daily_cost_limit_usd` | number | no | Daily cost limit |
+| `task_cost_limit_usd` | number | no | Per-task cost limit |
+| `default_model` | string | no | Default model for new sessions |
+| `auto_merge` | boolean | no | Auto-merge after approval |
+| `require_review` | boolean | no | Require review before merge |
+| `branch_prefix` | string | no | Branch naming prefix |
