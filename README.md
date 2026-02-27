@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-156_passing-6366f1?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/MCP_tools-47-8b5cf6?style=flat-square" alt="MCP Tools" />
+  <img src="https://img.shields.io/badge/tests-167_passing-6366f1?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP_tools-50-8b5cf6?style=flat-square" alt="MCP Tools" />
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -136,7 +136,7 @@ uv run entourage run AGENT_ID --task 1
 
 ## MCP tools
 
-47 tools across 14 categories. Agents discover and call these via the [Model Context Protocol](https://modelcontextprotocol.io).
+50 tools across 14 categories. Agents discover and call these via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 | Category | Tools | Count |
 |----------|-------|:-----:|
@@ -149,10 +149,10 @@ uv run entourage run AGENT_ID --task 1
 | **Git** | `create_worktree` `get_worktree` `remove_worktree` `get_task_diff` `get_changed_files` `read_file` `get_commits` | 7 |
 | **Sessions** | `start_session` `record_usage` `end_session` `check_budget` `get_cost_summary` | 5 |
 | **Human-in-the-loop** | `ask_human` `get_pending_requests` `respond_to_request` | 3 |
-| **Reviews** | `request_review` `approve_task` `reject_task` `get_merge_status` | 4 |
+| **Reviews** | `request_review` `approve_task` `reject_task` `get_merge_status` `get_review_feedback` | 5 |
 | **Auth** | `authenticate` | 1 |
 | **Webhooks** | `create_webhook` `list_webhooks` `update_webhook` | 3 |
-| **Settings** | `get_team_settings` `update_team_settings` | 2 |
+| **Settings** | `get_team_settings` `update_team_settings` `get_team_conventions` `add_team_convention` | 4 |
 | **Orchestration** | `create_tasks_batch` `wait_for_task_completion` `list_team_agents` | 3 |
 
 ## Architecture
@@ -195,7 +195,7 @@ entourage logout                     # Remove stored credentials
 
 ```bash
 cd packages/backend
-uv run pytest tests/ -v          # 156 tests, ~14s
+uv run pytest tests/ -v          # 167 tests, ~21s
 uv run pytest tests/ --run-e2e   # Include live agent E2E tests
 ```
 

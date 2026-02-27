@@ -312,8 +312,10 @@ async def test_team_creation_emits_events(client, org, db_session):
     assert "team.created" in event_types
     assert "agent.created" in event_types
 
-    # Verify event data
-    team_event = next(e for e in events if e.type == "team.created")
-    assert team_event.data["name"] == "Events Team"
+    # Verify event data — use the event matching our specific team
+    team_event = next(
+        e for e in events
+        if e.type == "team.created" and e.data.get("name") == "Events Team"
+    )
     assert team_event.data["slug"] == "events-team"
     assert team_event.stream_id.startswith("team:")

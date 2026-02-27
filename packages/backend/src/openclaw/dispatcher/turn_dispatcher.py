@@ -350,14 +350,27 @@ class TaskDispatcher:
                     break
 
                 async with self._db_pool.acquire() as conn:
-                    # Find agents with unprocessed messages
+                    # Find agents with unprocessed messages,
+                    # ordered by task priority (critical first)
                     rows = await conn.fetch("""
-                        SELECT DISTINCT m.recipient_id AS agent_id, m.team_id
+                        SELECT DISTINCT ON (m.recipient_id)
+                               m.recipient_id AS agent_id,
+                               m.team_id
                         FROM messages m
                         JOIN agents a ON a.id = m.recipient_id
+                        LEFT JOIN tasks t ON t.assignee_id = m.recipient_id
+                          AND t.status = 'in_progress'
                         WHERE m.processed_at IS NULL
                           AND m.recipient_type = 'agent'
                           AND a.status = 'idle'
+                        ORDER BY m.recipient_id,
+                                 CASE COALESCE(t.priority, 'medium')
+                                     WHEN 'critical' THEN 0
+                                     WHEN 'high' THEN 1
+                                     WHEN 'medium' THEN 2
+                                     WHEN 'low' THEN 3
+                                     ELSE 4
+                                 END
                         LIMIT 10
                     """)
 
