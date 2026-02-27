@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import os
 import sys
@@ -44,8 +45,20 @@ def _client() -> httpx.AsyncClient:
 
 
 def _run(coro):
-    """Run an async coroutine from synchronous Click handler."""
-    return asyncio.run(coro)
+    """Run an async coroutine from synchronous Click handler.
+
+    Handles nested event loops (e.g. when invoked via Click CliRunner
+    inside an existing async context like tests) by offloading to a thread.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop — normal CLI invocation
+        return asyncio.run(coro)
+    else:
+        # Already inside an event loop (e.g. test runner) — run in a thread
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(asyncio.run, coro).result()
 
 
 def _team_id_from_ctx(team_id: Optional[str]) -> str:
