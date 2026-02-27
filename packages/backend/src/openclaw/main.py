@@ -8,6 +8,7 @@ Unlike Delegate's 3400-line web.py monolith, this stays clean —
 each concern lives in its own module.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 
 import structlog
@@ -44,10 +45,24 @@ async def lifespan(app: FastAPI):
         logger.warning("openclaw.redis_unavailable", error=str(e))
         # Redis is optional — app works without real-time features
 
+    # Start merge worker (Phase 13)
+    from openclaw.services.merge_worker import MergeWorker
+    merge_worker = MergeWorker(poll_interval=5.0)
+    merge_task = asyncio.create_task(merge_worker.run_loop())
+    logger.info("openclaw.merge_worker_started")
+
     yield
 
     # Shutdown
     logger.info("openclaw.shutdown")
+
+    # Stop merge worker
+    merge_worker.stop()
+    merge_task.cancel()
+    try:
+        await merge_task
+    except asyncio.CancelledError:
+        pass
 
     # Close Redis
     await close_redis()
