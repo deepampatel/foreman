@@ -921,3 +921,120 @@ export async function createTasksBatch(
     body: { tasks },
   });
 }
+
+// ─── Tier 1: Git Push + PR ──────────────────────────────
+
+export interface PushResult {
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+}
+
+export interface PRInfo {
+  pr_url?: string;
+  pr_number?: number;
+  error?: string;
+}
+
+export async function pushBranch(
+  taskId: number,
+  repoId: string,
+  opts: { remote?: string; force?: boolean } = {}
+): Promise<PushResult> {
+  const params: Record<string, string> = { repo_id: repoId };
+  if (opts.remote) params.remote = opts.remote;
+  if (opts.force) params.force = "true";
+  return request(`/api/v1/tasks/${taskId}/push`, {
+    method: "POST",
+    params,
+  });
+}
+
+export async function createPR(
+  taskId: number,
+  repoId: string,
+  opts: {
+    title?: string;
+    body?: string;
+    draft?: boolean;
+    base_branch?: string;
+  } = {}
+): Promise<PRInfo> {
+  return request(`/api/v1/tasks/${taskId}/pr`, {
+    method: "POST",
+    body: {
+      repo_id: repoId,
+      title: opts.title,
+      body: opts.body,
+      draft: opts.draft,
+      base_branch: opts.base_branch,
+    },
+  });
+}
+
+export async function getPRInfo(taskId: number): Promise<PRInfo> {
+  return request(`/api/v1/tasks/${taskId}/pr`);
+}
+
+// ─── Tier 1: Review Verdict (agent) ──────────────────────
+
+export async function submitReviewVerdict(
+  reviewId: number,
+  verdict: string,
+  opts: {
+    summary?: string;
+    reviewer_id?: string;
+    reviewer_type?: string;
+  } = {}
+): Promise<ReviewInfo> {
+  return request(`/api/v1/reviews/${reviewId}/verdict`, {
+    method: "POST",
+    body: {
+      verdict,
+      summary: opts.summary,
+      reviewer_id: opts.reviewer_id,
+      reviewer_type: opts.reviewer_type || "agent",
+    },
+  });
+}
+
+export async function addReviewComment(
+  reviewId: number,
+  opts: {
+    author_id: string;
+    author_type?: string;
+    content: string;
+    file_path?: string;
+    line_number?: number;
+  }
+): Promise<ReviewComment> {
+  return request(`/api/v1/reviews/${reviewId}/comments`, {
+    method: "POST",
+    body: {
+      author_id: opts.author_id,
+      author_type: opts.author_type || "agent",
+      content: opts.content,
+      file_path: opts.file_path,
+      line_number: opts.line_number,
+    },
+  });
+}
+
+// ─── Tier 1: Context Carryover ───────────────────────────
+
+export async function saveContext(
+  taskId: number,
+  key: string,
+  value: string
+): Promise<{ key: string; value: string; saved: boolean }> {
+  return request(`/api/v1/tasks/${taskId}/context`, {
+    method: "POST",
+    body: { key, value },
+  });
+}
+
+export async function getContext(
+  taskId: number
+): Promise<{ task_id: number; context: Record<string, string> }> {
+  return request(`/api/v1/tasks/${taskId}/context`);
+}

@@ -149,6 +149,11 @@ class AgentRunner:
                     if c.get("active", True)
                 ]
 
+        # ── Load context carryover from task metadata ──────────
+        context_data = {}
+        if task and task.task_metadata:
+            context_data = task.task_metadata.get("context", {})
+
         # ── Build prompt ──────────────────────────────────────
         prompt = prompt_override or adapter.build_prompt(
             task_title=task.title if task else "General work",
@@ -158,6 +163,7 @@ class AgentRunner:
             task_id=task_id or 0,
             role=agent.role,
             conventions=conventions or None,
+            context=context_data or None,
         )
 
         # ── Build adapter config ──────────────────────────────

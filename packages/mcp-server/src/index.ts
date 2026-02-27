@@ -1336,6 +1336,202 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════
+// Tier 1: Git Push + PR Creation
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "push_branch",
+  "Push a task's git branch to the remote. Used before creating a PR or when you want to share your work.",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+    remote: z.string().describe("Remote name (default: origin)").default("origin"),
+    force: z.boolean().describe("Force push with --force-with-lease").default(false),
+  },
+  async (params) => {
+    try {
+      const result = await client.pushBranch(params.task_id, params.repo_id, {
+        remote: params.remote,
+        force: params.force,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "create_pr",
+  "Create a GitHub pull request for a task's branch. Uses the `gh` CLI under the hood.",
+  {
+    task_id: z.number().describe("Task ID"),
+    repo_id: z.string().describe("Repository UUID"),
+    title: z.string().describe("PR title (defaults to task title)").optional(),
+    body: z.string().describe("PR body/description").optional(),
+    draft: z.boolean().describe("Create as draft PR").default(false),
+    base_branch: z.string().describe("Base branch (defaults to repo default)").optional(),
+  },
+  async (params) => {
+    try {
+      const result = await client.createPR(params.task_id, params.repo_id, {
+        title: params.title,
+        body: params.body,
+        draft: params.draft,
+        base_branch: params.base_branch,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_pr_info",
+  "Get PR information (URL, number) for a task from stored metadata.",
+  {
+    task_id: z.number().describe("Task ID"),
+  },
+  async (params) => {
+    try {
+      const result = await client.getPRInfo(params.task_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════
+// Tier 1: Agent Code Review
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "submit_review_verdict",
+  "Submit a verdict on a code review: approve, request_changes, or reject. Used by reviewer agents after reading diffs and leaving comments.",
+  {
+    review_id: z.number().describe("Review ID"),
+    verdict: z.enum(["approve", "request_changes", "reject"]).describe("The review verdict"),
+    summary: z.string().describe("Summary of the review").optional(),
+    reviewer_id: z.string().describe("Reviewer agent UUID").optional(),
+    reviewer_type: z.string().describe("Reviewer type (agent or user)").default("agent"),
+  },
+  async (params) => {
+    try {
+      const result = await client.submitReviewVerdict(params.review_id, params.verdict, {
+        summary: params.summary,
+        reviewer_id: params.reviewer_id,
+        reviewer_type: params.reviewer_type,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "add_review_comment",
+  "Add a comment to a code review — optionally anchored to a specific file and line number. Used by reviewer agents to leave inline feedback.",
+  {
+    review_id: z.number().describe("Review ID"),
+    author_id: z.string().describe("Author (reviewer agent) UUID"),
+    author_type: z.string().describe("Author type (agent or user)").default("agent"),
+    content: z.string().describe("Comment content — explain the issue and suggest a fix"),
+    file_path: z.string().describe("File path (e.g. 'src/foo.py')").optional(),
+    line_number: z.number().describe("Line number in the file").optional(),
+  },
+  async (params) => {
+    try {
+      const result = await client.addReviewComment(params.review_id, {
+        author_id: params.author_id,
+        author_type: params.author_type,
+        content: params.content,
+        file_path: params.file_path,
+        line_number: params.line_number,
+      });
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ═══════════════════════════════════════════════════════════
+// Tier 1: Context Carryover
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "save_context",
+  "Save a key-value discovery to the task's persistent context. Persists across agent runs so you don't lose findings between turns. Use for root causes, architecture decisions, key files, etc.",
+  {
+    task_id: z.number().describe("Task ID"),
+    key: z.string().describe("Context key (e.g. 'root_cause', 'key_files', 'architecture_decision')"),
+    value: z.string().describe("Context value — what you discovered"),
+  },
+  async (params) => {
+    try {
+      const result = await client.saveContext(params.task_id, params.key, params.value);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "get_context",
+  "Get all saved context for a task — previous discoveries, decisions, and findings from earlier runs.",
+  {
+    task_id: z.number().describe("Task ID"),
+  },
+  async (params) => {
+    try {
+      const result = await client.getContext(params.task_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ─── Start server ──────────────────────────────────────────
 
 async function main() {

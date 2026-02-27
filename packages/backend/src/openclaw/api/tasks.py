@@ -17,7 +17,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openclaw.db.engine import get_db
+from openclaw.db.models import Task
 from pydantic import BaseModel, Field
+from sqlalchemy.orm.attributes import flag_modified
 
 from openclaw.schemas.task import (
     MessageCreate,
@@ -290,3 +292,57 @@ async def get_inbox(
         unprocessed_only=unprocessed_only,
         limit=limit,
     )
+
+
+# ═══════════════════════════════════════════════════════════
+# Context Carryover
+# ═══════════════════════════════════════════════════════════
+
+
+class ContextSave(BaseModel):
+    """Save a key-value pair to task context."""
+
+    key: str = Field(..., description="Context key (e.g. 'root_cause', 'architecture_decision')")
+    value: str = Field(..., description="Context value")
+
+
+@router.post("/tasks/{task_id}/context")
+async def save_context(
+    task_id: int,
+    body: ContextSave,
+    db: AsyncSession = Depends(get_db),
+):
+    """Save a key-value pair to task context (persists across agent runs).
+
+    Learn: Context carryover lets agents save discoveries (root cause, key files,
+    architecture decisions) so they don't start cold on re-dispatch. Stored in
+    task_metadata.context JSONB.
+    """
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    metadata = task.task_metadata or {}
+    context = metadata.get("context", {})
+    context[body.key] = body.value
+    task.task_metadata = {**metadata, "context": context}
+    flag_modified(task, "task_metadata")
+    await db.commit()
+    return {"key": body.key, "value": body.value, "saved": True}
+
+
+@router.get("/tasks/{task_id}/context")
+async def get_context(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all saved context for a task.
+
+    Returns the context dict from task_metadata, or empty dict if none.
+    """
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    metadata = task.task_metadata or {}
+    return {"task_id": task_id, "context": metadata.get("context", {})}

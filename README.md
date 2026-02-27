@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-167_passing-6366f1?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/MCP_tools-50-8b5cf6?style=flat-square" alt="MCP Tools" />
+  <img src="https://img.shields.io/badge/tests-201_passing-6366f1?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP_tools-58-8b5cf6?style=flat-square" alt="MCP Tools" />
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />

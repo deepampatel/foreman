@@ -2,7 +2,7 @@
 
 Entourage exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
 
-**Total tools: 50**
+**Total tools: 58**
 
 ## Connection
 
@@ -483,6 +483,94 @@ Record a new team convention. Agents will follow this in future runs.
 | `active` | boolean | no | `true` | Whether the convention is active |
 
 Conventions are stored in the team's JSONB config and automatically injected into agent prompts. Returns 409 if a convention with the same key already exists.
+
+---
+
+## Git Push + PR (Tier 1)
+
+### `push_branch`
+Push a task's git branch to the remote. Used before creating a PR or when sharing work.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | number | yes | | Task ID |
+| `repo_id` | string | yes | | Repository UUID |
+| `remote` | string | no | `origin` | Remote name |
+| `force` | boolean | no | `false` | Force push with `--force-with-lease` |
+
+### `create_pr`
+Create a GitHub pull request for a task's branch using the `gh` CLI.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `task_id` | number | yes | | Task ID |
+| `repo_id` | string | yes | | Repository UUID |
+| `title` | string | no | task title | PR title |
+| `body` | string | no | task description | PR body |
+| `draft` | boolean | no | `false` | Create as draft PR |
+| `base_branch` | string | no | repo default | Base branch to merge into |
+
+Returns `{pr_url, pr_number}` on success. PR URL and number are stored in task metadata.
+
+### `get_pr_info`
+Get PR information (URL, number) for a task from stored metadata.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+
+---
+
+## Agent Code Review (Tier 1)
+
+### `submit_review_verdict`
+Submit a verdict on a code review: approve, request_changes, or reject. Used by reviewer agents after reading diffs and leaving comments.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `review_id` | number | yes | | Review ID |
+| `verdict` | string | yes | | `approve`, `request_changes`, or `reject` |
+| `summary` | string | no | | Review summary |
+| `reviewer_id` | string | no | | Reviewer agent UUID |
+| `reviewer_type` | string | no | `agent` | `agent` or `user` |
+
+Agent `approve` keeps the task in `in_review` for human review. Agent `request_changes` triggers the automated feedback loop (task → in_progress, feedback sent to engineer, re-dispatch).
+
+### `add_review_comment`
+Add a comment to a code review, optionally anchored to a file and line number. Used by reviewer agents to leave inline feedback.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `review_id` | number | yes | | Review ID |
+| `author_id` | string | yes | | Author (reviewer) UUID |
+| `author_type` | string | no | `agent` | `agent` or `user` |
+| `content` | string | yes | | Comment content |
+| `file_path` | string | no | | File path (e.g. `src/foo.py`) |
+| `line_number` | number | no | | Line number in the file |
+
+---
+
+## Context Carryover (Tier 1)
+
+### `save_context`
+Save a key-value discovery to the task's persistent context. Persists across agent runs so findings aren't lost between turns.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+| `key` | string | yes | Context key (e.g. `root_cause`, `key_files`, `architecture_decision`) |
+| `value` | string | yes | What you discovered |
+
+Stored in `task_metadata.context` JSONB. Automatically injected into the agent prompt on subsequent runs.
+
+### `get_context`
+Get all saved context for a task — previous discoveries, decisions, and findings from earlier runs.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+
+Returns `{task_id, context: {key: value, ...}}`.
 
 ---
 

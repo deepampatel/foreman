@@ -144,20 +144,66 @@ Request types:
 
 ## Code Review Flow
 
+### Auto PR on Review Request
+
+When an engineer moves a task to `in_review`, the system automatically:
+1. Pushes the branch to the remote (via `GitService.push_branch`)
+2. Creates a GitHub PR (via `PRService` using `gh` CLI)
+3. Stores the PR URL and number in `task_metadata`
+
+This is best-effort — if push or PR creation fails, the review flow continues uninterrupted.
+
+### Two-Tier Review (Agent + Human)
+
+If the team has a **reviewer agent** (role=`reviewer`, status=`idle`), reviews are automatically assigned to it for a first-pass AI code review:
+
 ```
-1. Agent completes work              → request_review(task_id)
-2. Review created                    → attempt=1, verdict=null
-3. Reviewer adds comments            → review_comments table
-4. Reviewer renders verdict          → approve / reject / request_changes
-5a. If approved                      → task moves to in_approval
-5b. If request_changes               → task moves back to in_progress
-                                       → review comments sent to agent as message
-                                       → PG NOTIFY fires → agent re-dispatched
-                                       → agent reads feedback via get_review_feedback
-                                       → agent fixes code and re-submits
+1. Engineer completes work             → request_review(task_id)
+2. Branch pushed + PR created          → auto-push + gh pr create
+3. Reviewer agent auto-assigned        → _find_reviewer_agent(team_id)
+4. Reviewer agent dispatched           → message sent → PG NOTIFY → agent runs
+5. Reviewer reads diff, leaves comments → add_review_comment (file + line)
+6. Reviewer renders verdict:
+   6a. approve → task stays in_review for human final review
+   6b. request_changes → feedback loop (see below)
+7. Human reviews the pre-vetted code   → final approve → in_approval → merge
 ```
 
-Multiple review cycles are tracked via the `attempt` field. Each cycle is a fresh review. The feedback delivery is automatic — no manual intervention needed to get the agent working on fixes.
+Agent approval is a first-pass check — it does **not** auto-merge. The task stays in `in_review` so a human can do the final review.
+
+### Automated Feedback Loop
+
+When any reviewer (agent or human) gives `request_changes`:
+
+```
+Reviewer gives request_changes
+  → ReviewService formats comments (file paths, line numbers)
+  → Task: in_review → in_progress
+  → Formatted feedback sent as message to assignee agent
+  → PG NOTIFY → Dispatcher → Agent re-runs
+  → Agent reads feedback via get_review_feedback
+  → Agent fixes code and re-submits for review
+  → Cycle repeats until approved
+```
+
+Multiple review cycles are tracked via the `attempt` field. Each cycle is a fresh review. The feedback delivery is automatic — no manual intervention needed.
+
+## Context Carryover
+
+Agents can persist discoveries between runs using `save_context` / `get_context`:
+
+```
+Run 1: Agent investigates bug
+  → save_context(key="root_cause", value="Regex in password.py")
+  → save_context(key="key_files", value="auth/password.py:42")
+
+Run 2: Agent re-dispatched after review feedback
+  → Context automatically injected into prompt under PREVIOUS CONTEXT
+  → Agent already knows root cause + key files
+  → Jumps straight to fixing review comments
+```
+
+Context is stored in `task_metadata.context` JSONB and injected into the agent prompt at the start of each run.
 
 ## Event Sourcing
 
