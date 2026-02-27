@@ -23,6 +23,8 @@ dependencies = [
     "structlog>=24.4.0",
     "python-multipart>=0.0.12",
     "pyjwt>=2.11.0",
+    "click>=8.1.0",
+    "httpx>=0.28.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +38,9 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+
+[project.scripts]
+entourage = "openclaw.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openclaw"]

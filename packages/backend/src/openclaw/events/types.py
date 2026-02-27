@@ -53,3 +53,10 @@ WEBHOOK_DELIVERY_RECEIVED = "webhook.delivery_received"
 WEBHOOK_DELIVERY_PROCESSED = "webhook.delivery_processed"
 WEBHOOK_DELIVERY_FAILED = "webhook.delivery_failed"
 SETTINGS_UPDATED = "settings.updated"
+
+# ─── Phase 11: Agent adapter runs ───────────────────────
+
+AGENT_RUN_STARTED = "agent.run_started"
+AGENT_RUN_COMPLETED = "agent.run_completed"
+AGENT_RUN_FAILED = "agent.run_failed"
+AGENT_RUN_TIMEOUT = "agent.run_timeout"

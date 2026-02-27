@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     default_agent_model: str = "claude-sonnet-4-20250514"
     max_concurrent_agents: int = 32
 
+    # Agent adapter settings
+    default_adapter: str = "claude_code"
+    mcp_server_path: str = ""  # auto-detected if empty
+    agent_timeout_seconds: int = 1800  # 30 min default
+
     model_config = {"env_prefix": "OPENCLAW_"}
 
 
