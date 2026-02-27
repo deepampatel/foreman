@@ -11,8 +11,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/tests-147_passing-6366f1?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/MCP_tools-44-8b5cf6?style=flat-square" alt="MCP Tools" />
+  <img src="https://img.shields.io/badge/tests-152_passing-6366f1?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP_tools-47-8b5cf6?style=flat-square" alt="MCP Tools" />
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
@@ -121,15 +121,22 @@ uv run uvicorn openclaw.main:app --reload
 cd packages/mcp-server
 npm install && npm run build
 
-# 4. Connect an agent
-OPENCLAW_API_URL=http://localhost:8000 node packages/mcp-server/dist/index.js
+# 4. Frontend dashboard
+cd packages/frontend
+npm install && npm run dev        # http://localhost:5173
+
+# 5. CLI — run an agent
+cd packages/backend
+uv run entourage login --api-key oc_your_key_here
+uv run entourage status           # See your team
+uv run entourage run AGENT_ID --task 1
 ```
 
 > **Prerequisites:** Docker Desktop, Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 18+
 
 ## MCP tools
 
-44 tools across 13 categories. Agents discover and call these via the [Model Context Protocol](https://modelcontextprotocol.io).
+47 tools across 14 categories. Agents discover and call these via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 | Category | Tools | Count |
 |----------|-------|:-----:|
@@ -146,26 +153,54 @@ OPENCLAW_API_URL=http://localhost:8000 node packages/mcp-server/dist/index.js
 | **Auth** | `authenticate` | 1 |
 | **Webhooks** | `create_webhook` `list_webhooks` `update_webhook` | 3 |
 | **Settings** | `get_team_settings` `update_team_settings` | 2 |
+| **Orchestration** | `create_tasks_batch` `wait_for_task_completion` `list_team_agents` | 3 |
 
 ## Architecture
 
 ```
 packages/
   backend/        Python — FastAPI + SQLAlchemy 2.0 + Alembic
-  mcp-server/     TypeScript — 44 MCP tool definitions
+  mcp-server/     TypeScript — 47 MCP tool definitions
   frontend/       React 19 + Vite + TanStack Query
 ```
 
 15 database models, 8 Alembic migrations, 11 API routers, event sourcing throughout.
 
+### Agent Adapters
+
+Entourage dispatches work to pluggable coding agent backends:
+
+| Adapter | CLI | MCP Support | Notes |
+|---------|-----|:-----------:|-------|
+| **Claude Code** | `claude` | ✅ Native | Full MCP integration via `--mcp-config` |
+| **Codex** | `codex` | ✅ Native | OpenAI's agent with `--full-auto --mcp-config` |
+| **Aider** | `aider` | ❌ REST | No MCP; prompt includes curl-based API instructions |
+
+Check adapter availability: `entourage adapters`
+
+### CLI Reference
+
+```bash
+entourage status                     # Show team status (agents, tasks, requests)
+entourage agents                     # List agents and their current state
+entourage tasks [--status STATUS]    # List tasks with optional filter
+entourage run AGENT_ID [--task N]    # Dispatch an agent to work on a task
+entourage adapters                   # Show available adapters + readiness
+entourage respond REQUEST_ID MSG     # Respond to a human-in-the-loop request
+entourage login [--api-key KEY]      # Authenticate (JWT or API key)
+entourage logout                     # Remove stored credentials
+```
+
 ## Tests
 
 ```bash
 cd packages/backend
-uv run pytest tests/ -v    # 147 tests, ~10s
+uv run pytest tests/ -v          # 152 tests, ~14s
+uv run pytest tests/ --run-e2e   # Include live agent E2E tests
 ```
 
 Per-test savepoint rollback — fully isolated, no cleanup, runs against real Postgres.
+Includes a full lifecycle integration test exercising: task creation → assignment → human-in-the-loop → code review → approval → merge → done.
 
 ## Guides
 
@@ -216,6 +251,13 @@ python examples/webhook_automation.py   # GitHub webhook + HMAC verification
 | 8 | Code review + merge worker | ✅ |
 | 9 | Auth + multi-tenant (JWT, API keys) | ✅ |
 | 10 | Webhooks + team settings | ✅ |
+| 11 | Agent adapters + CLI + runner | ✅ |
+| 12 | Codex + Aider adapters | ✅ |
+| 13 | Merge worker (git merge/rebase/squash) | ✅ |
+| 14 | Auth on all API routes + CLI login | ✅ |
+| 15 | Dashboard polish (human requests, reviews, agent status) | ✅ |
+| 16 | Multi-agent orchestration (batch tasks, wait, team agents) | ✅ |
+| 17 | Full-flow E2E test + docs | ✅ |
 
 ## License
 

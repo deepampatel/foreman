@@ -10,7 +10,31 @@ Learn: Testing pattern for async SQLAlchemy + FastAPI + asyncpg:
 This gives us fast, isolated tests without any cross-test pollution.
 """
 
+import pytest
 import pytest_asyncio
+
+
+# ─── E2E test support ─────────────────────────────────────
+
+
+def pytest_addoption(parser):
+    """Add --run-e2e flag for live agent tests."""
+    parser.addoption(
+        "--run-e2e",
+        action="store_true",
+        default=False,
+        help="Run live E2E tests (requires running server + agent CLI)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip tests marked @pytest.mark.e2e unless --run-e2e is passed."""
+    if config.getoption("--run-e2e"):
+        return
+    skip_e2e = pytest.mark.skip(reason="Need --run-e2e to run")
+    for item in items:
+        if "e2e" in item.keywords:
+            item.add_marker(skip_e2e)
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 

@@ -38,6 +38,7 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+markers = ["e2e: live agent end-to-end tests (require --run-e2e flag)"]
 
 [project.scripts]
 entourage = "openclaw.cli.main:main"
