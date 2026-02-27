@@ -42,6 +42,7 @@ class AiderAdapter(AgentAdapter):
         agent_id: str,
         team_id: str,
         task_id: int,
+        role: str = "engineer",
     ) -> str:
         """Build the prompt for Aider with REST API instructions.
 

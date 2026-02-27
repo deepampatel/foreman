@@ -1183,6 +1183,88 @@ server.tool(
   }
 );
 
+// ═══════════════════════════════════════════════════════════
+// Phase 16: Multi-Agent Orchestration
+// ═══════════════════════════════════════════════════════════
+
+server.tool(
+  "wait_for_task_completion",
+  "Block until a task reaches a terminal status (done, cancelled, or in_review). Use this as a manager agent to wait for an engineer to finish a task.",
+  {
+    task_id: z.number().describe("Task ID to wait for"),
+    timeout_seconds: z.number().describe("Max seconds to wait (default 3600 = 1 hour)").default(3600),
+    terminal_statuses: z.array(z.string()).describe("Statuses to consider terminal").default(["done", "cancelled", "in_review"]),
+  },
+  async (params) => {
+    try {
+      const task = await client.pollForTaskCompletion(
+        params.task_id,
+        10000, // poll every 10 seconds
+        params.timeout_seconds * 1000,
+        params.terminal_statuses
+      );
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(task, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "create_tasks_batch",
+  "Create multiple tasks at once. Supports inter-batch dependencies via depends_on_indices (0-based positions in the batch). Use this as a manager agent to break down work into parallel or sequential engineer tasks.",
+  {
+    team_id: z.string().describe("Team UUID"),
+    tasks: z.array(z.object({
+      title: z.string().describe("Task title"),
+      description: z.string().describe("Task description").default(""),
+      priority: z.enum(["low", "medium", "high", "critical"]).default("medium"),
+      assignee_id: z.string().describe("Agent UUID to assign").optional(),
+      depends_on_indices: z.array(z.number()).describe("Indices (0-based) of other tasks in this batch that this task depends on").default([]),
+      tags: z.array(z.string()).default([]),
+    })).describe("Array of tasks to create"),
+  },
+  async (params) => {
+    try {
+      const tasks = await client.createTasksBatch(params.team_id, params.tasks);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(tasks, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
+  "list_team_agents",
+  "List all agents in a team with their roles and current status. Alias for list_agents — useful for manager agents to check team capacity before delegating work.",
+  {
+    team_id: z.string().describe("Team UUID"),
+  },
+  async (params) => {
+    try {
+      const agents = await client.listAgents(params.team_id);
+      return {
+        content: [{ type: "text" as const, text: JSON.stringify(agents, null, 2) }],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
 // ─── Start server ──────────────────────────────────────────
 
 async function main() {

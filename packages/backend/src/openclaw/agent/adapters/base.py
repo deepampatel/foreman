@@ -101,6 +101,7 @@ class AgentAdapter(ABC):
         agent_id: str,
         team_id: str,
         task_id: int,
+        role: str = "engineer",
     ) -> str:
         """Construct the prompt / initial instruction for the coding agent.
 
@@ -108,6 +109,9 @@ class AgentAdapter(ABC):
         - Task context (title, description)
         - Entourage MCP tool usage instructions
         - Agent identity (agent_id, team_id) for tool calls
+
+        The role param ("engineer" or "manager") allows adapters to
+        produce different prompts for different agent roles.
         """
 
     def validate_environment(self) -> tuple[bool, str]:

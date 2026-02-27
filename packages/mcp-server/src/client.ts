@@ -816,4 +816,47 @@ export async function updateTeamSettings(
   });
 }
 
-// ... grows with each phase
+// ─── Phase 16: Multi-Agent Orchestration ─────────────
+
+/**
+ * Poll for task completion — blocks until task reaches a terminal status.
+ *
+ * Learn: Manager agents use this to wait for engineer tasks to finish.
+ * Similar to pollForResponse but watches task status instead.
+ * Terminal states: done, cancelled, in_review (engineers move to in_review when done).
+ */
+export async function pollForTaskCompletion(
+  taskId: number,
+  pollIntervalMs: number = 10000,
+  timeoutMs: number = 3600000,
+  terminalStatuses: string[] = ["done", "cancelled", "in_review"]
+): Promise<Task> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const task = await getTask(taskId);
+    if (terminalStatuses.includes(task.status)) {
+      return task;
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+  }
+  throw new Error(
+    `Timed out waiting for task ${taskId} to complete after ${Math.round(timeoutMs / 1000)}s`
+  );
+}
+
+export async function createTasksBatch(
+  teamId: string,
+  tasks: Array<{
+    title: string;
+    description?: string;
+    priority?: string;
+    assignee_id?: string;
+    depends_on_indices?: number[];
+    tags?: string[];
+  }>
+): Promise<Task[]> {
+  return request(`/api/v1/teams/${teamId}/tasks/batch`, {
+    method: "POST",
+    body: { tasks },
+  });
+}

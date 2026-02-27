@@ -43,6 +43,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         agent_id: str,
         team_id: str,
         task_id: int,
+        role: str = "engineer",
     ) -> str:
         """Build the prompt that tells Claude Code how to use Entourage MCP tools.
 
@@ -51,7 +52,27 @@ class ClaudeCodeAdapter(AgentAdapter):
         - Which MCP tools to call and when
         - How to handle human-in-the-loop (ask_human with wait=true)
         - When to signal completion
+
+        For manager role, includes orchestration instructions (batch tasks,
+        delegate to engineers, wait for completion, etc.).
         """
+        if role == "manager":
+            return self._build_manager_prompt(
+                task_title, task_description, agent_id, team_id, task_id
+            )
+        return self._build_engineer_prompt(
+            task_title, task_description, agent_id, team_id, task_id
+        )
+
+    def _build_engineer_prompt(
+        self,
+        task_title: str,
+        task_description: str,
+        agent_id: str,
+        team_id: str,
+        task_id: int,
+    ) -> str:
+        """Engineer prompt — focuses on writing code and completing a single task."""
         return f"""You are an Entourage engineer agent working on a task.
 
 TASK #{task_id}: {task_title}
@@ -92,6 +113,94 @@ YOUR IDENTITY:
 
 Focus on completing the task. Write clean, tested code. When done, move
 the task to in_review status.
+"""
+
+    def _build_manager_prompt(
+        self,
+        task_title: str,
+        task_description: str,
+        agent_id: str,
+        team_id: str,
+        task_id: int,
+    ) -> str:
+        """Manager prompt — focuses on decomposing work and orchestrating engineers."""
+        return f"""You are an Entourage MANAGER agent responsible for orchestrating work.
+
+TASK #{task_id}: {task_title}
+
+DESCRIPTION:
+{task_description}
+
+YOUR ROLE:
+You are a manager. You do NOT write code yourself. Instead, you:
+1. Break down the task into sub-tasks
+2. Assign sub-tasks to engineer agents
+3. Monitor their progress
+4. Coordinate dependencies between tasks
+5. Report completion when all sub-tasks are done
+
+ORCHESTRATION WORKFLOW:
+
+Step 1 — CHECK YOUR TEAM:
+Call mcp__entourage__list_team_agents(team_id="{team_id}") to see available
+engineers, their roles, and current status (idle/working).
+
+Step 2 — PLAN AND CREATE SUB-TASKS:
+Use mcp__entourage__create_tasks_batch to create multiple sub-tasks at once.
+You can specify dependencies between tasks using depends_on_indices:
+
+  mcp__entourage__create_tasks_batch(
+    team_id="{team_id}",
+    tasks=[
+      {{"title": "Set up database schema", "description": "...", "priority": "high"}},
+      {{"title": "Build API endpoints", "description": "...", "depends_on_indices": [0]}},
+      {{"title": "Write tests", "description": "...", "depends_on_indices": [0, 1]}}
+    ]
+  )
+
+Tasks with depends_on_indices cannot start until their dependencies are done.
+
+Step 3 — ASSIGN TASKS:
+Assign each sub-task to an idle engineer:
+  mcp__entourage__assign_task(task_id=<id>, assignee_id="<engineer_id>")
+
+Step 4 — WAIT FOR COMPLETION:
+Wait for sub-tasks to finish using the blocking wait:
+  mcp__entourage__wait_for_task_completion(task_id=<id>, timeout_seconds=3600)
+
+This blocks until the task reaches done, cancelled, or in_review.
+For parallel tasks, you can wait on each in sequence — tasks run concurrently.
+
+Step 5 — COMMUNICATE:
+Send messages to engineers for clarification:
+  mcp__entourage__send_message(
+    team_id="{team_id}", sender_id="{agent_id}",
+    recipient_id="<engineer_id>", body="your message"
+  )
+
+Step 6 — HUMAN ESCALATION:
+If you need a human decision, call:
+  mcp__entourage__ask_human(
+    team_id="{team_id}", agent_id="{agent_id}",
+    kind="question", question="your question",
+    task_id={task_id}, wait=true
+  )
+
+Step 7 — COMPLETE:
+When all sub-tasks are done, mark the parent task complete:
+  mcp__entourage__change_task_status(task_id={task_id}, status="in_review", actor_id="{agent_id}")
+
+OTHER TOOLS:
+- mcp__entourage__get_task(task_id=<id>) — check a task's current state
+- mcp__entourage__get_task_events(task_id=<id>) — view audit trail
+- mcp__entourage__list_tasks(team_id="{team_id}") — see all team tasks
+
+YOUR IDENTITY:
+- agent_id: {agent_id}
+- team_id: {team_id}
+- task_id: {task_id} (your parent/orchestration task)
+
+Begin by checking your team, then plan the decomposition of the task.
 """
 
     async def run(self, prompt: str, config: AdapterConfig) -> AdapterResult:

@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from openclaw.db.engine import get_db
+from pydantic import BaseModel, Field
+
 from openclaw.schemas.task import (
     MessageCreate,
     MessageRead,
@@ -159,6 +161,69 @@ async def assign_task(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+# ═══════════════════════════════════════════════════════════
+# Batch Task Creation (Multi-Agent Orchestration)
+# ═══════════════════════════════════════════════════════════
+
+
+class BatchTaskItem(BaseModel):
+    """A single task in a batch create request."""
+
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    assignee_id: Optional[str] = None
+    depends_on_indices: list[int] = Field(
+        default_factory=list,
+        description="Indices (0-based) of other tasks in this batch that this task depends on",
+    )
+    tags: list[str] = Field(default_factory=list)
+
+
+class BatchTaskRequest(BaseModel):
+    """Batch task creation request."""
+
+    tasks: list[BatchTaskItem]
+
+
+@router.post("/teams/{team_id}/tasks/batch", response_model=list[TaskRead], status_code=201)
+async def create_tasks_batch(
+    team_id: uuid.UUID,
+    body: BatchTaskRequest,
+    svc: TaskService = Depends(_task_svc),
+):
+    """Create multiple tasks at once with inter-batch dependencies.
+
+    Learn: Manager agents use this to break down work into parallel or
+    sequential sub-tasks. depends_on_indices references positions (0-based)
+    in the batch array, which are resolved to real task IDs after creation.
+    """
+    created_tasks: list = []
+    for i, item in enumerate(body.tasks):
+        # Resolve depends_on_indices to real task IDs
+        depends_on = []
+        for idx in item.depends_on_indices:
+            if idx < 0 or idx >= len(created_tasks):
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Task {i}: depends_on_indices[{idx}] out of range",
+                )
+            depends_on.append(created_tasks[idx].id)
+
+        task = await svc.create_task(
+            team_id=team_id,
+            title=item.title,
+            description=item.description,
+            priority=item.priority,
+            assignee_id=item.assignee_id,
+            depends_on=depends_on,
+            tags=item.tags,
+        )
+        created_tasks.append(task)
+
+    return created_tasks
 
 
 # ═══════════════════════════════════════════════════════════

@@ -146,6 +146,7 @@ class AgentRunner:
             agent_id=agent_id,
             team_id=effective_team_id,
             task_id=task_id or 0,
+            role=agent.role,
         )
 
         # ── Build adapter config ──────────────────────────────
