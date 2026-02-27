@@ -12,7 +12,7 @@ import { useOrgs, useTeams } from "./hooks/useApi";
 import { Dashboard } from "./pages/Dashboard";
 import { HumanRequests } from "./pages/HumanRequests";
 import { Tasks } from "./pages/Tasks";
-import "./App.css";
+import "./styles/index.css";
 
 function App() {
   const { data: orgs } = useOrgs();

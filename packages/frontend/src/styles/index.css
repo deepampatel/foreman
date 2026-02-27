@@ -1,0 +1,16 @@
+/**
+ * Entourage Dashboard Styles
+ * Dark theme, clean layout, real-time dashboard feel.
+ *
+ * Split into logical modules for maintainability.
+ */
+
+@import "./base.css";
+@import "./layout.css";
+@import "./stats.css";
+@import "./agents.css";
+@import "./tasks.css";
+@import "./costs.css";
+@import "./human-requests.css";
+@import "./reviews.css";
+@import "./utilities.css";

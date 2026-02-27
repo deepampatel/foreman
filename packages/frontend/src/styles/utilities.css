@@ -1,0 +1,29 @@
+/* ─── Utilities ───────────────────────────────────────── */
+
+.empty-state,
+.sidebar-empty {
+  color: #555;
+  font-size: 0.85rem;
+  font-style: italic;
+}
+
+.empty-state-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60vh;
+  color: #555;
+}
+
+.empty-state-page h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: #888;
+}
+
+.loading {
+  color: #666;
+  padding: 2rem;
+  text-align: center;
+}

@@ -1,0 +1,88 @@
+/* ─── Agent Grid ──────────────────────────────────────── */
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.agent-card {
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.agent-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.agent-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.agent-meta {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.agent-role {
+  text-transform: capitalize;
+}
+
+.agent-status-text {
+  font-size: 0.75rem;
+  color: #999;
+  text-transform: capitalize;
+}
+
+/* ─── Agent Card Enhancements ────────────────────────── */
+
+.agent-adapter {
+  color: #555;
+  font-style: italic;
+}
+
+.agent-current-task {
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  color: #10b981;
+  line-height: 1.3;
+}
+
+.agent-run-btn {
+  margin-top: 0.75rem;
+  width: 100%;
+  padding: 0.4rem 0.75rem;
+  background: #1f2937;
+  color: #93c5fd;
+  border: 1px solid #374151;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.agent-run-btn:hover:not(:disabled) {
+  background: #374151;
+  color: #bfdbfe;
+}
+
+.agent-run-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

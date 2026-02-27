@@ -1,0 +1,25 @@
+/* ─── Cost Table ──────────────────────────────────────── */
+
+.cost-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cost-table th,
+.cost-table td {
+  padding: 0.5rem 1rem;
+  text-align: left;
+  border-bottom: 1px solid #222;
+}
+
+.cost-table th {
+  font-size: 0.75rem;
+  color: #666;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.cost-table td {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
