@@ -45,6 +45,7 @@ class ClaudeCodeAdapter(AgentAdapter):
         task_id: int,
         role: str = "engineer",
         conventions: list[dict] | None = None,
+        context: dict | None = None,
     ) -> str:
         """Build the prompt that tells Claude Code how to use Entourage MCP tools.
 
@@ -54,19 +55,44 @@ class ClaudeCodeAdapter(AgentAdapter):
         - How to handle human-in-the-loop (ask_human with wait=true)
         - When to signal completion
         - Team conventions (coding standards, architecture decisions)
+        - Previous context from earlier runs (context carryover)
 
         For manager role, includes orchestration instructions (batch tasks,
         delegate to engineers, wait for completion, etc.).
+        For reviewer role, includes diff reading and comment instructions.
         """
         if role == "manager":
             return self._build_manager_prompt(
                 task_title, task_description, agent_id, team_id, task_id,
-                conventions=conventions,
+                conventions=conventions, context=context,
+            )
+        if role == "reviewer":
+            return self._build_reviewer_prompt(
+                task_title, task_description, agent_id, team_id, task_id,
+                conventions=conventions, context=context,
             )
         return self._build_engineer_prompt(
             task_title, task_description, agent_id, team_id, task_id,
-            conventions=conventions,
+            conventions=conventions, context=context,
         )
+
+    def _build_conventions_section(self, conventions: list[dict] | None, prefix: str = "Follow these team standards:") -> str:
+        """Build the conventions section common to all prompts."""
+        if not conventions:
+            return ""
+        lines = ["TEAM CONVENTIONS:", prefix]
+        for c in conventions:
+            lines.append(f"- {c['key']}: {c['content']}")
+        return "\n".join(lines) + "\n\n"
+
+    def _build_context_section(self, context: dict | None) -> str:
+        """Build the context carryover section from previous runs."""
+        if not context:
+            return ""
+        lines = ["PREVIOUS CONTEXT:", "Key findings from earlier work on this task:"]
+        for k, v in context.items():
+            lines.append(f"- {k}: {v}")
+        return "\n".join(lines) + "\n\n"
 
     def _build_engineer_prompt(
         self,
@@ -76,14 +102,11 @@ class ClaudeCodeAdapter(AgentAdapter):
         team_id: str,
         task_id: int,
         conventions: list[dict] | None = None,
+        context: dict | None = None,
     ) -> str:
         """Engineer prompt — focuses on writing code and completing a single task."""
-        conventions_section = ""
-        if conventions:
-            lines = ["TEAM CONVENTIONS:", "Follow these team standards:"]
-            for c in conventions:
-                lines.append(f"- {c['key']}: {c['content']}")
-            conventions_section = "\n".join(lines) + "\n\n"
+        conventions_section = self._build_conventions_section(conventions)
+        context_section = self._build_context_section(context)
 
         return f"""You are an Entourage engineer agent working on a task.
 
@@ -92,7 +115,7 @@ TASK #{task_id}: {task_title}
 DESCRIPTION:
 {task_description}
 
-{conventions_section}INSTRUCTIONS:
+{conventions_section}{context_section}INSTRUCTIONS:
 You have access to Entourage MCP tools for task management and coordination.
 Work on the task using your normal coding abilities (read files, write files,
 run commands, etc.) and use these Entourage MCP tools as needed:
@@ -104,7 +127,7 @@ run commands, etc.) and use these Entourage MCP tools as needed:
    mcp__entourage__get_review_feedback(task_id={task_id})
 
 2. TASK STATUS: When you start working, the task is already in_progress.
-   When you're done, call:
+   When you're done, move to in_review — a PR will be auto-created:
    mcp__entourage__change_task_status(task_id={task_id}, status="in_review", actor_id="{agent_id}")
 
 3. HUMAN INPUT: If you need a decision from a human, call:
@@ -124,6 +147,11 @@ run commands, etc.) and use these Entourage MCP tools as needed:
 5. COMMENTS: To add notes to the task, call:
    mcp__entourage__add_task_comment(task_id={task_id}, body="your comment")
 
+6. SAVE CONTEXT: When you discover something important (root cause, architecture
+   decisions, key files involved), save it for future reference:
+   mcp__entourage__save_context(task_id={task_id}, key="root_cause", value="description of what you found")
+   This persists across runs so you don't lose discoveries.
+
 YOUR IDENTITY:
 - agent_id: {agent_id}
 - team_id: {team_id}
@@ -141,14 +169,13 @@ the task to in_review status.
         team_id: str,
         task_id: int,
         conventions: list[dict] | None = None,
+        context: dict | None = None,
     ) -> str:
         """Manager prompt — focuses on decomposing work and orchestrating engineers."""
-        conventions_section = ""
-        if conventions:
-            lines = ["TEAM CONVENTIONS:", "Ensure all sub-tasks follow these team standards:"]
-            for c in conventions:
-                lines.append(f"- {c['key']}: {c['content']}")
-            conventions_section = "\n".join(lines) + "\n\n"
+        conventions_section = self._build_conventions_section(
+            conventions, prefix="Ensure all sub-tasks follow these team standards:"
+        )
+        context_section = self._build_context_section(context)
 
         return f"""You are an Entourage MANAGER agent responsible for orchestrating work.
 
@@ -157,7 +184,7 @@ TASK #{task_id}: {task_title}
 DESCRIPTION:
 {task_description}
 
-{conventions_section}YOUR ROLE:
+{conventions_section}{context_section}YOUR ROLE:
 You are a manager. You do NOT write code yourself. Instead, you:
 1. Break down the task into sub-tasks
 2. Assign sub-tasks to engineer agents
@@ -227,6 +254,97 @@ YOUR IDENTITY:
 - task_id: {task_id} (your parent/orchestration task)
 
 Begin by checking your team, then plan the decomposition of the task.
+"""
+
+    def _build_reviewer_prompt(
+        self,
+        task_title: str,
+        task_description: str,
+        agent_id: str,
+        team_id: str,
+        task_id: int,
+        conventions: list[dict] | None = None,
+        context: dict | None = None,
+    ) -> str:
+        """Reviewer prompt — focuses on reading diffs and providing code review feedback.
+
+        Learn: Reviewer agents do automated first-pass code reviews.
+        They read the diff, check for issues, leave comments, and
+        give a verdict. Human reviewers do the final review after.
+        """
+        conventions_section = self._build_conventions_section(
+            conventions, prefix="Check code against these team standards:"
+        )
+        context_section = self._build_context_section(context)
+
+        return f"""You are an Entourage REVIEWER agent. Your job is to review code changes.
+
+TASK #{task_id}: {task_title}
+
+DESCRIPTION:
+{task_description}
+
+{conventions_section}{context_section}REVIEW WORKFLOW:
+
+Step 1 — CHECK YOUR INBOX:
+Read the review request message:
+  mcp__entourage__get_inbox(agent_id="{agent_id}")
+Extract the review_id from the message.
+
+Step 2 — GET THE DIFF:
+  mcp__entourage__get_task_diff(task_id={task_id}, repo_id="<repo_id>")
+  mcp__entourage__get_changed_files(task_id={task_id}, repo_id="<repo_id>")
+
+Step 3 — READ CHANGED FILES:
+For each changed file, read the full content to understand context:
+  mcp__entourage__read_file(task_id={task_id}, repo_id="<repo_id>", path="<file>")
+
+Step 4 — CHECK FOR ISSUES:
+Look for:
+- Logic errors, off-by-one mistakes, missing edge cases
+- Security issues (SQL injection, XSS, unvalidated input)
+- Missing error handling or test coverage
+- Violations of team conventions
+- Unclear naming or poor code organization
+- Race conditions or concurrency issues
+
+Step 5 — LEAVE COMMENTS:
+For each issue found, leave a specific, actionable comment:
+  mcp__entourage__add_review_comment(
+    review_id=<review_id>,
+    author_id="{agent_id}", author_type="agent",
+    content="Explain the issue and suggest a fix",
+    file_path="src/foo.py", line_number=42
+  )
+
+Step 6 — RENDER VERDICT:
+If issues were found:
+  mcp__entourage__submit_review_verdict(
+    review_id=<review_id>, verdict="request_changes",
+    summary="Found N issues — see comments",
+    reviewer_id="{agent_id}", reviewer_type="agent"
+  )
+
+If the code looks good:
+  mcp__entourage__submit_review_verdict(
+    review_id=<review_id>, verdict="approve",
+    summary="Code looks clean and well-tested",
+    reviewer_id="{agent_id}", reviewer_type="agent"
+  )
+
+IMPORTANT GUIDELINES:
+- Be thorough but not nitpicky — focus on correctness and security
+- Always explain WHY something is an issue, not just WHAT
+- Suggest specific fixes, not vague feedback
+- If you approve, the code goes to human review next — flag anything borderline
+- Don't comment on style preferences unless they violate team conventions
+
+YOUR IDENTITY:
+- agent_id: {agent_id}
+- team_id: {team_id}
+- task_id: {task_id}
+
+Begin by checking your inbox for the review request.
 """
 
     async def run(self, prompt: str, config: AdapterConfig) -> AdapterResult:

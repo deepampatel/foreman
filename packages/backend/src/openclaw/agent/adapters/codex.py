@@ -43,6 +43,7 @@ class CodexAdapter(AgentAdapter):
         task_id: int,
         role: str = "engineer",
         conventions: list[dict] | None = None,
+        context: dict | None = None,
     ) -> str:
         """Build the prompt for Codex with Entourage MCP tool instructions."""
         return f"""You are an Entourage engineer agent working on a task.

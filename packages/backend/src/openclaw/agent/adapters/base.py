@@ -103,6 +103,7 @@ class AgentAdapter(ABC):
         task_id: int,
         role: str = "engineer",
         conventions: list[dict] | None = None,
+        context: dict | None = None,
     ) -> str:
         """Construct the prompt / initial instruction for the coding agent.
 
@@ -111,9 +112,10 @@ class AgentAdapter(ABC):
         - Entourage MCP tool usage instructions
         - Agent identity (agent_id, team_id) for tool calls
         - Team conventions (coding standards, architecture decisions)
+        - Previous context from earlier runs (context carryover)
 
-        The role param ("engineer" or "manager") allows adapters to
-        produce different prompts for different agent roles.
+        The role param ("engineer", "manager", or "reviewer") allows
+        adapters to produce different prompts for different agent roles.
         """
 
     def validate_environment(self) -> tuple[bool, str]:
