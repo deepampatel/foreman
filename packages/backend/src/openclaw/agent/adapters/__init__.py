@@ -12,12 +12,14 @@ Agents specify their adapter via the config JSONB column:
     agent.config["adapter"] = "claude_code"  # default
 """
 
+from openclaw.agent.adapters.aider import AiderAdapter
 from openclaw.agent.adapters.base import (
     AdapterConfig,
     AdapterResult,
     AgentAdapter,
 )
 from openclaw.agent.adapters.claude_code import ClaudeCodeAdapter
+from openclaw.agent.adapters.codex import CodexAdapter
 
 __all__ = [
     "AgentAdapter",
@@ -32,6 +34,8 @@ __all__ = [
 
 _ADAPTERS: dict[str, type[AgentAdapter]] = {
     "claude_code": ClaudeCodeAdapter,
+    "codex": CodexAdapter,
+    "aider": AiderAdapter,
 }
 
 
