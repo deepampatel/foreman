@@ -1,4 +1,4 @@
-# Database Schema
+# Database Schema — Entourage
 
 ## Entity Relationship Diagram
 

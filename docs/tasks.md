@@ -1,4 +1,4 @@
-# Task State Machine
+# Task State Machine — Entourage
 
 ## State Diagram
 

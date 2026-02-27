@@ -1,6 +1,6 @@
-# MCP Tools Reference
+# MCP Tools Reference — Entourage
 
-OpenClaw exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
+Entourage exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
 
 **Total tools: 44**
 

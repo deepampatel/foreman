@@ -1,105 +1,137 @@
-# OpenClaw
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="Entourage" width="100%" />
+</p>
 
-Orchestration platform for AI developer agents. OpenClaw handles the structure — tasks, teams, git, reviews, approvals, cost tracking — so agents can focus on writing code.
+<p align="center">
+  <strong>Your AI development entourage.</strong>
+  <br />
+  Orchestrate AI developer agents with tasks, git, reviews, approvals, and cost tracking.
+  <br />
+  Agents connect via <a href="https://modelcontextprotocol.io">MCP</a>. Humans get a real-time dashboard. Every action is event-sourced.
+</p>
 
-AI agents connect via [MCP](https://modelcontextprotocol.io) tools. Humans get a real-time dashboard. Every action is event-sourced.
+<p align="center">
+  <img src="https://img.shields.io/badge/tests-147_passing-6366f1?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP_tools-44-8b5cf6?style=flat-square" alt="MCP Tools" />
+  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/TypeScript-5.0+-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+</p>
+
+---
+
+## How it works
 
 ```
 ┌─────────────┐         ┌─────────────┐         ┌──────────────┐
-│  AI Agents  │──MCP───►│  OpenClaw   │◄──HTTP──│   Dashboard  │
+│  AI Agents  │──MCP───▶│  Entourage  │◀──HTTP──│   Dashboard  │
 │  (Claude,   │  stdio  │   Backend   │         │   (React)    │
-│   etc.)     │◄────────│             │────────►│              │
+│   etc.)     │◀────────│             │────────▶│              │
 └─────────────┘         └──────┬──────┘         └──────────────┘
                                │
                     ┌──────────┼──────────┐
                     │          │          │
                PostgreSQL    Redis      Git
+              (all state)  (pub/sub)  (worktrees)
 ```
+
+You define the work. Your entourage executes it. Agents get tasks, write code in isolated git worktrees, request reviews, wait for approvals, and merge — all through 44 MCP tools. Humans stay in the loop via a real-time dashboard.
 
 ## Features
 
-- **Task state machine** — `todo` → `in_progress` → `in_review` → `in_approval` → `merging` → `done`, with validated transitions and cancellation from any active state
-- **DAG dependencies** — Task B can't start until Task A is done. Enforced at the database level
-- **Event sourcing** — Every state change is an immutable event. Full audit trail for any entity
-- **Multi-agent messaging** — Decoupled inbox system for agent-to-agent and human-to-agent communication
-- **Git integration** — Branch-per-task worktrees, diffs, file browsing, commit history
-- **Session & cost tracking** — Per-agent token usage, budget enforcement (daily + per-task limits), cost summaries
-- **Real-time dashboard** — WebSocket + Redis pub/sub for live updates
-- **Human-in-the-loop** — Agents can ask questions, request approvals, and wait for human responses
-- **Code review + merge** — Review cycles with comments, verdicts (approve/reject/request_changes), merge queue
-- **Multi-agent dispatch** — PG LISTEN/NOTIFY triggers agent turns on new messages (<100ms latency)
-- **Auth** — JWT access/refresh tokens for users, SHA-256 hashed API keys for agents
-- **Webhooks** — GitHub webhook receiver with HMAC-SHA256 signature verification and delivery audit trail
-- **Team settings** — Configurable budget limits, model preferences, workflow settings per team
-- **MCP-first** — 44 tools. Agents manage all work through MCP, not custom APIs
-- **Multi-tenant** — Organizations → Teams → Agents. Auto-provisions a manager agent per team
+<table>
+<tr>
+<td width="50%">
 
-## Quick Start
+**Task orchestration**
+- State machine with 7 states and validated transitions
+- DAG dependencies — Task B waits for Task A
+- Event sourcing — full audit trail for everything
+
+**Git integration**
+- Branch-per-task with git worktrees
+- Diffs, file browsing, commit history
+- Merge queue with rebase/squash strategies
+
+**Agent management**
+- Session tracking with token/cost accounting
+- Budget enforcement (daily + per-task limits)
+- Multi-agent dispatch via PG LISTEN/NOTIFY
+
+</td>
+<td width="50%">
+
+**Human-in-the-loop**
+- Agents ask questions, request approvals
+- Review cycles with file-anchored comments
+- Approve/reject/request changes verdicts
+
+**Auth & multi-tenant**
+- JWT access/refresh tokens for humans
+- API keys (SHA-256 hashed) for agents
+- Organizations → Teams → Agents hierarchy
+
+**Integrations**
+- GitHub webhooks with HMAC-SHA256 verification
+- Configurable team settings (budgets, models, workflows)
+- Real-time WebSocket + Redis pub/sub
+
+</td>
+</tr>
+</table>
+
+## Quick start
 
 ```bash
-# 1. Start Postgres + Redis
-docker compose up -d
+# 1. Infrastructure
+docker compose up -d              # Postgres 16 + Redis 7
 
 # 2. Backend
 cd packages/backend
-uv sync
-uv run alembic upgrade head
+uv sync && uv run alembic upgrade head
 uv run uvicorn openclaw.main:app --reload
 
 # 3. MCP server
 cd packages/mcp-server
 npm install && npm run build
 
-# 4. Frontend
-cd packages/frontend
-npm install && npx vite build
-
-# 5. Connect an agent
+# 4. Connect an agent
 OPENCLAW_API_URL=http://localhost:8000 node packages/mcp-server/dist/index.js
 ```
 
-**Prerequisites:** Docker Desktop, Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 18+
+> **Prerequisites:** Docker Desktop, Python 3.12+ with [uv](https://docs.astral.sh/uv/), Node.js 18+
 
-## MCP Tools (44)
+## MCP tools
 
-Agents interact with OpenClaw entirely through MCP tools:
+44 tools across 13 categories. Agents discover and call these via the [Model Context Protocol](https://modelcontextprotocol.io).
 
-| Category | Tools |
-|----------|-------|
-| **Platform** | `ping` |
-| **Orgs & Teams** | `list_orgs` `create_org` `list_teams` `create_team` `get_team` |
-| **Agents** | `list_agents` `create_agent` |
-| **Repos** | `list_repos` `register_repo` |
-| **Tasks** | `create_task` `list_tasks` `get_task` `update_task` `change_task_status` `assign_task` `get_task_events` |
-| **Messages** | `send_message` `get_inbox` |
-| **Git** | `create_worktree` `get_worktree` `remove_worktree` `get_task_diff` `get_changed_files` `read_file` `get_commits` |
-| **Sessions & Costs** | `start_session` `record_usage` `end_session` `check_budget` `get_cost_summary` |
-| **Human-in-the-loop** | `ask_human` `get_pending_requests` `respond_to_request` |
-| **Reviews & Merge** | `request_review` `approve_task` `reject_task` `get_merge_status` |
-| **Auth** | `authenticate` |
-| **Webhooks** | `create_webhook` `list_webhooks` `update_webhook` |
-| **Settings** | `get_team_settings` `update_team_settings` |
+| Category | Tools | Count |
+|----------|-------|:-----:|
+| **Platform** | `ping` | 1 |
+| **Orgs & Teams** | `list_orgs` `create_org` `list_teams` `create_team` `get_team` | 5 |
+| **Agents** | `list_agents` `create_agent` | 2 |
+| **Repos** | `list_repos` `register_repo` | 2 |
+| **Tasks** | `create_task` `list_tasks` `get_task` `update_task` `change_task_status` `assign_task` `get_task_events` | 7 |
+| **Messages** | `send_message` `get_inbox` | 2 |
+| **Git** | `create_worktree` `get_worktree` `remove_worktree` `get_task_diff` `get_changed_files` `read_file` `get_commits` | 7 |
+| **Sessions** | `start_session` `record_usage` `end_session` `check_budget` `get_cost_summary` | 5 |
+| **Human-in-the-loop** | `ask_human` `get_pending_requests` `respond_to_request` | 3 |
+| **Reviews** | `request_review` `approve_task` `reject_task` `get_merge_status` | 4 |
+| **Auth** | `authenticate` | 1 |
+| **Webhooks** | `create_webhook` `list_webhooks` `update_webhook` | 3 |
+| **Settings** | `get_team_settings` `update_team_settings` | 2 |
 
-## Project Structure
+## Architecture
 
 ```
 packages/
-  backend/        Python — FastAPI + SQLAlchemy 2.0 + Alembic + asyncpg
-  mcp-server/     TypeScript — MCP tool definitions + HTTP client
+  backend/        Python — FastAPI + SQLAlchemy 2.0 + Alembic
+  mcp-server/     TypeScript — 44 MCP tool definitions
   frontend/       React 19 + Vite + TanStack Query
 ```
 
-### Backend Layout
-
-```
-src/openclaw/
-  api/            REST endpoints (teams, tasks, git, sessions, reviews, auth, webhooks, settings)
-  auth/           JWT + API key authentication
-  db/             Models, engine, Alembic migrations
-  dispatcher/     PG LISTEN/NOTIFY multi-agent dispatcher
-  events/         Event store + type constants
-  services/       Business logic (sessions, reviews, human loop, webhooks)
-```
+15 database models, 8 Alembic migrations, 11 API routers, event sourcing throughout.
 
 ## Tests
 
@@ -108,31 +140,33 @@ cd packages/backend
 uv run pytest tests/ -v    # 147 tests, ~10s
 ```
 
-Tests use per-test savepoint rollback — fully isolated, no cleanup needed.
+Per-test savepoint rollback — fully isolated, no cleanup, runs against real Postgres.
+
+## Documentation
+
+| Doc | What's inside |
+|-----|--------------|
+| [Architecture](docs/architecture.md) | System design, data flow, subsystems |
+| [Database Schema](docs/database.md) | 15 tables, relationships, migrations |
+| [Task State Machine](docs/tasks.md) | Transitions, DAG, review flow, event types |
+| [MCP Tools Reference](docs/mcp-tools.md) | All 44 tools with parameters |
+| [Development Guide](docs/development.md) | Setup, testing, patterns, project structure |
 
 ## Roadmap
 
 | Phase | What | Status |
-|-------|------|--------|
-| 0 | Project skeleton + MCP | Done |
-| 1 | Orgs, teams, agents, repos | Done |
-| 2 | Tasks, state machine, messages, event sourcing | Done |
-| 3 | Git integration (worktrees, branch-per-task) | Done |
-| 4 | Agent sessions + cost controls | Done |
-| 5 | Real-time dashboard (WebSocket + Redis pub/sub) | Done |
-| 6 | Multi-agent dispatch (PG LISTEN/NOTIFY) | Done |
-| 7 | Human-in-the-loop | Done |
-| 8 | Code review + merge worker | Done |
-| 9 | Auth + multi-tenant security | Done |
-| 10 | Settings + integrations (webhooks, team config) | Done |
-
-## Documentation
-
-- [Architecture](docs/architecture.md) — System design, data flow, tech stack
-- [Database Schema](docs/database.md) — All tables, relationships, column details
-- [Task State Machine](docs/tasks.md) — Transitions, DAG enforcement, event sourcing
-- [MCP Tools Reference](docs/mcp-tools.md) — Every tool with parameters and examples
-- [Development Guide](docs/development.md) — Setup, testing patterns, project structure
+|:-----:|------|:------:|
+| 0 | Project skeleton + MCP | ✅ |
+| 1 | Orgs, teams, agents, repos | ✅ |
+| 2 | Tasks, state machine, messages, events | ✅ |
+| 3 | Git integration (worktrees, branch-per-task) | ✅ |
+| 4 | Agent sessions + cost controls | ✅ |
+| 5 | Real-time dashboard (WebSocket + Redis) | ✅ |
+| 6 | Multi-agent dispatch (PG LISTEN/NOTIFY) | ✅ |
+| 7 | Human-in-the-loop (approvals, questions) | ✅ |
+| 8 | Code review + merge worker | ✅ |
+| 9 | Auth + multi-tenant (JWT, API keys) | ✅ |
+| 10 | Webhooks + team settings | ✅ |
 
 ## License
 
