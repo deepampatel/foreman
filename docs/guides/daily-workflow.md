@@ -50,7 +50,7 @@ The agent gets unblocked and continues working.
 
 ## Mid-morning: Create new work
 
-A bug report comes in. Instead of opening Claude and explaining the whole codebase, you create a structured task:
+A bug report comes in. If you've set up [webhook automation](webhook-automation.md), the GitHub issue automatically becomes a task with the right priority (mapped from labels). Otherwise, you create a structured task manually:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/teams/{team_id}/tasks \
@@ -117,13 +117,22 @@ curl -X POST http://localhost:8000/api/v1/reviews/{review_id}/comments \
 ### Give a verdict
 
 ```bash
-# Request changes — agent will go back and fix
+# Request changes — agent will automatically go back and fix
 curl -X POST http://localhost:8000/api/v1/reviews/{review_id}/verdict \
   -H "Content-Type: application/json" \
   -d '{"verdict": "request_changes", "body": "See comments — need one more test case"}'
 ```
 
-The agent sees the feedback, makes changes, and requests review again. This cycle continues until you approve:
+**This triggers the automated feedback loop.** When you give `request_changes`:
+
+1. Your review comments are formatted into structured feedback
+2. The task transitions back to `in_progress`
+3. The feedback is sent as a message to the assignee agent
+4. The dispatcher re-runs the agent automatically
+5. The agent reads the feedback via `get_review_feedback` and fixes the issues
+6. The agent re-submits for review
+
+No manual intervention needed — you just give the verdict and the agent handles the rest. This cycle continues until you approve:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/reviews/{review_id}/verdict \
@@ -266,7 +275,19 @@ When agents hit ambiguity, they don't guess — they call `ask_human` and wait. 
 
 Set daily and per-task cost caps. Entourage tracks every token spent in every session. When a budget is exceeded, the agent is told to stop.
 
-### 5. Audit everything
+### 5. Team conventions, not repeated instructions
+
+Instead of telling every agent "use pytest" and "follow PEP 8", set conventions once:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/settings/teams/{team_id}/conventions \
+  -H "Content-Type: application/json" \
+  -d '{"key": "testing", "content": "Always write unit tests with pytest. Target 80% coverage."}'
+```
+
+Conventions are automatically injected into every agent's prompt. Add them once, enforce them forever.
+
+### 6. Audit everything
 
 Every state change, every assignment, every review verdict is an immutable event. Six months from now, you can trace exactly what happened on any task.
 

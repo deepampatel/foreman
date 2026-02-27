@@ -69,6 +69,28 @@ Tasks can move backward:
 - **Approval rejection:** `in_approval` → `in_progress` (manager wants changes)
 - **Merge failure:** `merging` → `in_progress` (conflicts or CI failure)
 
+### Automated Review Feedback Loop
+
+When a reviewer gives a `request_changes` verdict, the system automatically:
+
+1. Formats all review comments into structured feedback (file paths, line numbers, content)
+2. Transitions the task back to `in_progress`
+3. Sends the formatted feedback as a message to the assignee agent
+4. PG NOTIFY fires → Dispatcher re-runs the agent
+
+The agent's prompt instructs it to **check its inbox for review feedback first** using the `get_review_feedback` tool. This creates a fully automated review→fix→resubmit cycle without manual intervention.
+
+```
+Reviewer gives request_changes
+  → ReviewService formats comments
+  → Task: in_review → in_progress
+  → Message sent to assignee agent
+  → PG NOTIFY → Dispatcher → Agent re-runs
+  → Agent reads feedback, fixes code
+  → Agent requests review again
+  → Cycle repeats until approved
+```
+
 ## DAG Dependency Enforcement
 
 Tasks can declare dependencies via the `depends_on` integer array.
@@ -128,11 +150,14 @@ Request types:
 3. Reviewer adds comments            → review_comments table
 4. Reviewer renders verdict          → approve / reject / request_changes
 5a. If approved                      → task moves to in_approval
-5b. If rejected/request_changes      → task moves back to in_progress
-                                       → new review attempt on resubmit
+5b. If request_changes               → task moves back to in_progress
+                                       → review comments sent to agent as message
+                                       → PG NOTIFY fires → agent re-dispatched
+                                       → agent reads feedback via get_review_feedback
+                                       → agent fixes code and re-submits
 ```
 
-Multiple review cycles are tracked via the `attempt` field. Each cycle is a fresh review.
+Multiple review cycles are tracked via the `attempt` field. Each cycle is a fresh review. The feedback delivery is automatic — no manual intervention needed to get the agent working on fixes.
 
 ## Event Sourcing
 
@@ -189,6 +214,7 @@ Query the full history: `GET /api/v1/tasks/1/events`
 | `review.created` | Review requested | task_id, attempt |
 | `review.verdict` | Verdict rendered | verdict, reviewer_id |
 | `review.comment_added` | Comment on review | file_path, line_number |
+| `review.feedback_sent` | Review feedback delivered to agent | review_id, assignee_id, comment_count |
 | `merge.queued` | Merge job created | task_id, strategy |
 | `merge.started` | Merge worker picks up job | |
 | `merge.completed` | Merge succeeded | merge_commit |

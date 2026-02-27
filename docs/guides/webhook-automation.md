@@ -13,11 +13,13 @@ Verify HMAC-SHA256 signature
         ↓
 Log delivery in webhook_deliveries
         ↓
-Process event → create/update task
+Process event → auto-create task
         ↓
-Emit event via Redis pub/sub
+Map GitHub labels → task priority
         ↓
-Dashboard updates in real-time
+(optional) Auto-assign to idle agent
+        ↓
+PG NOTIFY → Dispatcher → Agent starts work
 ```
 
 Every webhook delivery is logged. You can see what came in, whether it was processed, and what action was taken.
@@ -50,14 +52,17 @@ curl -X POST http://localhost:8000/api/v1/webhooks \
   -H "X-API-Key: oc_your_key_here" \
   -d '{
     "org_id": "{org_id}",
+    "team_id": "{team_id}",
+    "name": "GitHub Issues + PRs",
     "provider": "github",
-    "events": ["issues.opened", "issues.closed", "pull_request.opened", "pull_request.merged"],
+    "events": ["issues", "pull_request"],
     "config": {
-      "team_id": "{team_id}",
       "auto_assign": true
     }
   }'
 ```
+
+The `team_id` is required for auto-task creation. Without it, events are logged but no tasks are created. The `auto_assign` config option assigns new tasks to the first idle agent in the team.
 
 Response:
 
@@ -117,32 +122,48 @@ curl http://localhost:8000/api/v1/webhooks/{webhook_id}/deliveries \
 
 ### `issues.opened` → Task created
 
-When someone opens a GitHub issue, Entourage can auto-create a task:
+When someone opens a GitHub issue, Entourage auto-creates a task:
 
 ```
-GitHub Issue: "Login broken on Safari"
+GitHub Issue #42: "Login broken on Safari"
+  Labels: ["critical", "auth"]
   ↓
 Entourage Task:
-  title: "Login broken on Safari"
-  priority: medium
-  task_type: bugfix
+  title: "[GitHub] Login broken on Safari"
+  description: "GitHub Issue #42\n\n<issue body>"
+  priority: critical    ← mapped from "critical" label
   status: todo
-  tags: ["github", "issue:42"]
+  tags: ["github", "issue", "critical", "auth"]
 ```
 
-If `auto_assign` is enabled in webhook config, the task gets assigned to the team's first available engineer.
+**Label → Priority mapping:**
 
-### `issues.closed` → Task status updated
+| GitHub labels | Entourage priority |
+|--------------|-------------------|
+| `critical`, `urgent`, `P0` | `critical` |
+| `high`, `important`, `P1` | `high` |
+| `low`, `minor`, `P3` | `low` |
+| _(anything else)_ | `medium` |
 
-When the GitHub issue is closed, the corresponding task is updated to reflect it.
+If `auto_assign` is enabled in webhook config, the task gets assigned to the team's first idle agent and dispatch starts immediately.
 
-### `pull_request.opened` → Review triggered
+### `pull_request.opened` → Task created
 
-A new PR can trigger Entourage's review pipeline — an agent reviews the code using the same structured review system (file-anchored comments, approve/reject/request-changes).
+A new PR auto-creates a task:
 
-### `pull_request.merged` → Task completed
+```
+GitHub PR #99: "Add rate limiting"
+  ↓
+Entourage Task:
+  title: "[GitHub PR] Add rate limiting"
+  description: "GitHub PR #99\n\n<PR body>"
+  priority: medium
+  tags: ["github", "pull_request"]
+```
 
-When a PR merges, the associated task moves to `done`.
+### Other events
+
+Events like `push`, `issues.closed`, `pull_request.merged` are logged in the delivery audit trail but do not currently create or modify tasks.
 
 ## Security: HMAC-SHA256 verification
 

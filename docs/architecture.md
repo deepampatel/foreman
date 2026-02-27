@@ -8,7 +8,7 @@
 │                                                                  │
 │   ┌──────────┐    MCP (stdio)    ┌──────────────────────────┐   │
 │   │ AI Agent │◄─────────────────►│     MCP Server (TS)      │   │
-│   │ (Claude, │    47 tools       │  tasks, git, reviews,    │   │
+│   │ (Claude, │    50 tools       │  tasks, git, reviews,    │   │
 │   │  etc.)   │                   │  sessions, webhooks, ... │   │
 │   └──────────┘                   └────────────┬─────────────┘   │
 │                                               │ REST             │
@@ -82,7 +82,7 @@ GitHub POST → /webhooks/{id}/receive → Verify HMAC-SHA256 signature
 ## Layer Separation
 
 ```
-MCP Tool Definition (index.ts)      What agents see (47 tools)
+MCP Tool Definition (index.ts)      What agents see (50 tools)
         │
         ▼
 HTTP Client (client.ts)              Protocol bridge (MCP → HTTP)
@@ -161,12 +161,23 @@ Dual authentication:
 - **JWT tokens** — For human users (60min access + 30-day refresh)
 - **API keys** — For agents/CI (`oc_` prefix, SHA-256 hashed, org-scoped, optional expiry)
 
+### Review Feedback Loop (Closed Loop)
+When a reviewer gives `request_changes`, the system automatically:
+1. Formats review comments into structured feedback
+2. Transitions the task back to `in_progress`
+3. Sends the feedback as a message to the assignee agent
+4. PG NOTIFY fires → Dispatcher re-runs the agent with feedback in its inbox
+
+The agent's prompt instructs it to check for review feedback before starting work, creating a fully automated review→fix→resubmit cycle.
+
 ### Webhook Receiver (Phase 10)
 GitHub/GitLab webhook ingestion:
 - HMAC-SHA256 signature verification
 - Event filtering (configurable per webhook)
 - Delivery audit trail (every payload logged)
-- Extensible event processing
+- Auto-creates tasks from `issues.opened` and `pull_request.opened` events
+- Maps GitHub labels to task priority (`critical`/`urgent`/`P0` → critical, etc.)
+- Optional auto-assign to idle agents via `webhook.config.auto_assign`
 
 ### Agent Adapter System (Phase 11)
 Pluggable adapters that launch and manage external AI coding agents. Each adapter subclasses `AgentAdapter` and implements `run()` (start the agent process) and `build_prompt()` (format the task into agent-specific instructions).
@@ -180,6 +191,12 @@ Three built-in adapters in `packages/backend/src/openclaw/agent/adapters/`:
 | `aider.py` | Aider | Spawns `aider` with `--message` flag, reads result |
 
 All adapters run the agent process in a task worktree so changes are branch-isolated. The adapter system is used by the CLI `run` command and the dispatcher when auto-assigning work.
+
+### Team Conventions
+Team coding conventions stored in `teams.config` JSONB (no migration needed). CRUD via `/settings/teams/{id}/conventions`. Active conventions are loaded by `AgentRunner` and injected into all adapter prompts — agents follow team standards automatically.
+
+### Priority-Weighted Dispatch
+The dispatcher's fallback poll query orders agents by task priority (`critical → high → medium → low`). Critical bugs get dispatched before low-priority cleanup work.
 
 ### Merge Worker (Phase 12)
 Background task that polls the `merge_jobs` table for jobs with status `queued`. For each job:

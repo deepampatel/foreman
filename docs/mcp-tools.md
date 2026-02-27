@@ -2,7 +2,7 @@
 
 Entourage exposes all platform capabilities as MCP tools. AI agents discover and call these tools via the [Model Context Protocol](https://modelcontextprotocol.io).
 
-**Total tools: 47**
+**Total tools: 50**
 
 ## Connection
 
@@ -385,6 +385,15 @@ Get merge readiness status — review verdict, merge jobs, can_merge flag.
 |-----------|------|----------|-------------|
 | `task_id` | number | yes | Task ID |
 
+### `get_review_feedback`
+Get the latest review feedback for a task — comments, verdict, and summary from the most recent `request_changes` review. Use this to understand what the reviewer wants you to fix.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `task_id` | number | yes | Task ID |
+
+Returns formatted review comments, file locations, and the reviewer's summary. Returns `null` if no `request_changes` review exists.
+
 ---
 
 ## Auth (Phase 9)
@@ -453,6 +462,27 @@ Update team configuration. Only provided fields are changed (merge behavior).
 | `auto_merge` | boolean | no | Auto-merge after approval |
 | `require_review` | boolean | no | Require review before merge |
 | `branch_prefix` | string | no | Branch naming prefix |
+
+### `get_team_conventions`
+Get team coding conventions — standards, architecture decisions, testing strategies. These are injected into agent prompts automatically.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `team_id` | string | yes | Team UUID |
+
+Returns an array of convention objects: `{key, content, active}`.
+
+### `add_team_convention`
+Record a new team convention. Agents will follow this in future runs.
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `team_id` | string | yes | | Team UUID |
+| `key` | string | yes | | Convention identifier (e.g. `testing`, `code_style`, `architecture`) |
+| `content` | string | yes | | The convention text — what agents should follow |
+| `active` | boolean | no | `true` | Whether the convention is active |
+
+Conventions are stored in the team's JSONB config and automatically injected into agent prompts. Returns 409 if a convention with the same key already exists.
 
 ---
 
