@@ -6,6 +6,7 @@
  * (future enhancement).
  */
 
+import { Link } from "react-router-dom";
 import type { Agent, Review, Task } from "../api/types";
 import { PRIORITY_COLORS, STATUS_LABELS, type Priority, type TaskStatus } from "../api/types";
 
@@ -53,7 +54,9 @@ export function TaskCard({ task, agents, review }: TaskCardProps) {
           </span>
         </div>
       </div>
-      <div className="task-title">{task.title}</div>
+      <Link to={`/tasks/${task.id}`} className="task-title" style={{ color: "inherit", textDecoration: "none" }}>
+        {task.title}
+      </Link>
       <div className="task-footer">
         <span className={`task-status task-status-${task.status}`}>
           {statusLabel}

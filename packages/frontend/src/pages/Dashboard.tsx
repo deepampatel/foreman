@@ -9,6 +9,7 @@
 
 import { AgentCard } from "../components/AgentCard";
 import { HumanRequestCard } from "../components/HumanRequestCard";
+import { SkeletonGrid, SkeletonList } from "../components/Skeleton";
 import { StatCard } from "../components/StatCard";
 import { TaskCard } from "../components/TaskCard";
 import {
@@ -29,8 +30,8 @@ export function Dashboard({ teamId }: DashboardProps) {
   // Real-time updates via WebSocket
   useTeamSocket(teamId);
 
-  const { data: tasks } = useTasks(teamId);
-  const { data: agents } = useAgents(teamId);
+  const { data: tasks, isLoading: tasksLoading } = useTasks(teamId);
+  const { data: agents, isLoading: agentsLoading } = useAgents(teamId);
   const { data: costs } = useCosts(teamId);
   const { data: pendingRequests } = useHumanRequests(teamId, "pending");
   const respondMutation = useRespondToRequest(teamId);
@@ -95,33 +96,41 @@ export function Dashboard({ teamId }: DashboardProps) {
       {/* Agents Section */}
       <section className="dashboard-section">
         <h2>Agents</h2>
-        <div className="agent-grid">
-          {agents?.map((agent) => (
-            <AgentCard
-              key={agent.id}
-              agent={agent}
-              tasks={tasks}
-              onRunAgent={handleRunAgent}
-              isRunning={runAgentMutation.isPending}
-            />
-          ))}
-          {agents?.length === 0 && (
-            <p className="empty-state">No agents configured</p>
-          )}
-        </div>
+        {agentsLoading ? (
+          <SkeletonGrid count={4} />
+        ) : (
+          <div className="agent-grid">
+            {agents?.map((agent) => (
+              <AgentCard
+                key={agent.id}
+                agent={agent}
+                tasks={tasks}
+                onRunAgent={handleRunAgent}
+                isRunning={runAgentMutation.isPending}
+              />
+            ))}
+            {agents?.length === 0 && (
+              <p className="empty-state">No agents configured</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Active Tasks Section */}
       <section className="dashboard-section">
         <h2>Active Tasks</h2>
-        <div className="task-list">
-          {activeTasks?.map((task) => (
-            <TaskCard key={task.id} task={task} agents={agents} />
-          ))}
-          {activeTasks?.length === 0 && (
-            <p className="empty-state">No active tasks</p>
-          )}
-        </div>
+        {tasksLoading ? (
+          <SkeletonList count={3} />
+        ) : (
+          <div className="task-list">
+            {activeTasks?.map((task) => (
+              <TaskCard key={task.id} task={task} agents={agents} />
+            ))}
+            {activeTasks?.length === 0 && (
+              <p className="empty-state">No active tasks</p>
+            )}
+          </div>
+        )}
       </section>
 
       {/* Cost Breakdown */}

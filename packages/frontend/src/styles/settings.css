@@ -1,0 +1,109 @@
+/* ─── Settings Page ──────────────────────────────────── */
+
+.settings-page {
+  max-width: 600px;
+}
+
+.settings-page h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.settings-team-name {
+  font-size: 0.85rem;
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-section h2 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.75rem;
+}
+
+.settings-field {
+  margin-bottom: 0.75rem;
+}
+
+.settings-field label {
+  display: block;
+  font-size: 0.8rem;
+  color: #999;
+  margin-bottom: 0.35rem;
+}
+
+.settings-field input[type="text"],
+.settings-field input[type="number"] {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.settings-field input:focus {
+  outline: none;
+  border-color: #555;
+}
+
+.settings-toggle label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #ccc;
+}
+
+.settings-toggle input[type="checkbox"] {
+  accent-color: #10b981;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.settings-save-btn {
+  padding: 0.5rem 1.5rem;
+  background: #10b981;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-save-btn:hover:not(:disabled) {
+  background: #059669;
+}
+
+.settings-save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.settings-saved {
+  color: #4ade80;
+  font-size: 0.85rem;
+}
+
+.settings-error {
+  color: #f87171;
+  font-size: 0.85rem;
+}

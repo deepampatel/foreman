@@ -11,6 +11,8 @@ import { Routes, Route, NavLink, Navigate } from "react-router-dom";
 import { useOrgs, useTeams } from "./hooks/useApi";
 import { Dashboard } from "./pages/Dashboard";
 import { HumanRequests } from "./pages/HumanRequests";
+import { Settings } from "./pages/Settings";
+import { TaskDetail } from "./pages/TaskDetail";
 import { Tasks } from "./pages/Tasks";
 import "./styles/index.css";
 
@@ -67,6 +69,9 @@ function App() {
           <NavLink to="/requests" className="nav-link">
             Requests
           </NavLink>
+          <NavLink to="/settings" className="nav-link">
+            Settings
+          </NavLink>
         </div>
       </nav>
 
@@ -76,7 +81,9 @@ function App() {
           <Routes>
             <Route path="/dashboard" element={<Dashboard teamId={teamId} />} />
             <Route path="/tasks" element={<Tasks teamId={teamId} />} />
+            <Route path="/tasks/:taskId" element={<TaskDetail teamId={teamId} />} />
             <Route path="/requests" element={<HumanRequests teamId={teamId} />} />
+            <Route path="/settings" element={<Settings teamId={teamId} />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         ) : (

@@ -15,6 +15,7 @@ import type {
   Org,
   Review,
   Task,
+  TaskEvent,
   Team,
 } from "../api/types";
 
@@ -167,6 +168,52 @@ export function useRejectTask(teamId: string) {
     },
   });
 }
+
+// ─── Task Events ──────────────────────────────────────
+
+export function useTaskEvents(taskId: number | undefined) {
+  return useQuery({
+    queryKey: ["task-events", taskId],
+    queryFn: () =>
+      apiClient.get<TaskEvent[]>(`/api/v1/tasks/${taskId}/events`),
+    enabled: !!taskId,
+  });
+}
+
+// ─── Team Settings ────────────────────────────────────
+
+export interface TeamSettings {
+  team_id: string;
+  team_name: string;
+  settings: Record<string, unknown>;
+}
+
+export function useTeamSettings(teamId: string | undefined) {
+  return useQuery({
+    queryKey: ["team-settings", teamId],
+    queryFn: () =>
+      apiClient.get<TeamSettings>(`/api/v1/settings/teams/${teamId}`),
+    enabled: !!teamId,
+  });
+}
+
+export function useUpdateTeamSettings(teamId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: Record<string, unknown>) =>
+      apiClient.patch<TeamSettings>(
+        `/api/v1/settings/teams/${teamId}`,
+        settings
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["team-settings", teamId],
+      });
+    },
+  });
+}
+
+// ─── Agent Run ────────────────────────────────────────
 
 export function useRunAgent(teamId: string) {
   const queryClient = useQueryClient();
