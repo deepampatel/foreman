@@ -34,6 +34,8 @@ You don't need to set up credentials — examples create ephemeral users on each
 | [code_review_flow.py](code_review_flow.py) | Review with file-anchored comments, request changes, approve | 30s |
 | [webhook_automation.py](webhook_automation.py) | Register webhook, simulate GitHub event, verify HMAC security | 30s |
 | [batch_orchestration.py](batch_orchestration.py) | DAG task decomposition, 4 specialist agents, session cost tracking | 30s |
+| [auto_pr_and_review.py](auto_pr_and_review.py) | Push branch → create PR → two-tier agent+human code review | 30s |
+| [context_carryover.py](context_carryover.py) | Save/load context between tasks so agents start warm | 30s |
 
 ## Running
 
@@ -47,6 +49,8 @@ python human_in_the_loop.py
 python code_review_flow.py
 python webhook_automation.py
 python batch_orchestration.py
+python auto_pr_and_review.py
+python context_carryover.py
 ```
 
 Each script prints step-by-step output showing what's happening. Example output from `quickstart.py`:
